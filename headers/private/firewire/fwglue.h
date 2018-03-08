@@ -27,7 +27,6 @@
 #define rounddown(x, y) (((x)/(y))*(y)) // 比x小，y的最大的倍数
 #define roundup(x, y)   ((((x)+((y)-1))/(y))*(y))  /* to any y */ // 比x大，y的最小倍数
 #define roundup2(x, y)  (((x)+((y)-1))&(~((y)-1))) /* if y is powers of two */
-#define powerof2(x)     ((((x)-1)&(x))==0) // 是否是2的次方
 
 typedef uint32_t bus_addr_t;
 typedef uint32_t bus_size_t;
@@ -54,7 +53,5 @@ typedef uint32_t bus_size_t;
 
 #define MAX_CARDS 4
 extern dpc_module_info *gDpc;
-
-#define	__offsetof(type, field)	((size_t)(&((type *)0)->field))
 
 #endif /*_FW_GLUE_H*/

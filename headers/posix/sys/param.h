@@ -30,4 +30,26 @@
 #	define MAXHOSTNAMELEN 256
 #endif
 
+#ifndef powerof2
+#define powerof2(x)     ((((x) - 1) & (x)) == 0)
+#endif
+
+#ifndef setbit
+#define	setbit(a,i)	(((unsigned char *)(a))[(i)/8] |= 1<<((i)%8))
+#endif
+
+#ifndef clrbit
+#define	clrbit(a,i)	(((unsigned char *)(a))[(i)/8] &= ~(1<<((i)%8)))
+#endif
+
+#ifndef isset
+#define	isset(a,i)							\
+	(((const unsigned char *)(a))[(i)/8] & (1<<((i)%8)))
+#endif
+
+#ifndef isclr
+#define	isclr(a,i)							\
+	((((const unsigned char *)(a))[(i)/8] & (1<<((i)%8))) == 0)
+#endif
+
 #endif	/* _SYS_PARAM_H */

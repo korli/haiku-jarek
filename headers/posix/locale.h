@@ -5,7 +5,7 @@
 #ifndef _LOCALE_H_
 #define _LOCALE_H_
 
-
+#include <sys/cdefs.h>
 #include <null.h>
 
 struct lconv {
