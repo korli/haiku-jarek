@@ -52,7 +52,6 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
-#define __dead2
 #define __va_list va_list
 
 __BEGIN_DECLS

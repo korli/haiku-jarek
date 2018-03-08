@@ -10,6 +10,7 @@
 
 #include <sys/haiku-module.h>
 
+#include <sys/cdefs.h>
 #include <sys/linker_set.h>
 #include <sys/queue.h>
 

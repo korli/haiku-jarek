@@ -6,9 +6,7 @@
 #define _FBSD_COMPAT_SYS_LINKER_SET_H_
 
 
-#ifndef _FBSD_COMPAT_SYS_CDEFS_H_
-#error this file needs sys/cdefs.h as a prerequisite
-#endif
+#include <sys/cdefs.h>
 
 /*
  * The following macros are used to declare global sets of objects, which

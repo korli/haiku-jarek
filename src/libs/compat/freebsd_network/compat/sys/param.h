@@ -64,12 +64,4 @@
 
 #define	NBBY	8		/* number of bits in a byte */
 
-/* Bit map related macros. */
-#define	setbit(a,i)	(((unsigned char *)(a))[(i)/NBBY] |= 1<<((i)%NBBY))
-#define	clrbit(a,i)	(((unsigned char *)(a))[(i)/NBBY] &= ~(1<<((i)%NBBY)))
-#define	isset(a,i)							\
-	(((const unsigned char *)(a))[(i)/NBBY] & (1<<((i)%NBBY)))
-#define	isclr(a,i)							\
-	((((const unsigned char *)(a))[(i)/NBBY] & (1<<((i)%NBBY))) == 0)
-
 #endif	/* _FBSD_COMPAT_SYS_PARAM_H_ */
