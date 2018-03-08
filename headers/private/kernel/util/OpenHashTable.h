@@ -321,6 +321,21 @@ public:
 		return size * sizeof(ValueType*);
 	}
 
+	/*!
+	 * Only check if resize is needed - roughly
+	 */
+	bool ResizeNeededGuess() const
+	{
+		size_t size = fTableSize;
+		if (size == 0 || fItemCount >= (size * 200 / 256)) {
+			return true;
+		} else if (size > kMinimumSize && fItemCount < size * 50 / 256) {
+			return true;
+		}
+
+		return false;
+	}
+
 	/*!	Resizes the table using the given allocation. The allocation must not
 		be \c NULL. It must be of size \a size, which must be a value returned
 		earlier by ResizeNeeded(). If the size requirements have changed in the
