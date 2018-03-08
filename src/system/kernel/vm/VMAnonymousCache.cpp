@@ -144,6 +144,7 @@ typedef DoublyLinkedList<swap_file> SwapFileList;
 
 static SwapHashTable sSwapHashTable;
 static rw_lock sSwapHashLock;
+static ConditionVariable sSwapHashResizeCondition;
 
 static SwapFileList sSwapFileList;
 static mutex sSwapFileListLock;
@@ -366,28 +367,41 @@ swap_space_unreserve(off_t amount)
 }
 
 
-static void
-swap_hash_resizer(void*, int)
+static status_t swap_hash_resizer(void*)
 {
-	WriteLocker locker(sSwapHashLock);
-
 	size_t size;
 	void* allocation;
 
-	do {
+	for(;;) {
+		WriteLocker locker(sSwapHashLock);
 		size = sSwapHashTable.ResizeNeeded();
-		if (size == 0)
-			return;
+
+		if (size == 0) {
+			ConditionVariableEntry entry;
+			sSwapHashResizeCondition.Add(&entry);
+			locker.Unlock();
+			entry.Wait();
+			continue;
+		}
 
 		locker.Unlock();
 
 		allocation = malloc(size);
-		if (allocation == NULL)
-			return;
 
 		locker.Lock();
 
-	} while (!sSwapHashTable.Resize(allocation, size));
+		if (allocation == NULL) {
+			ConditionVariableEntry entry;
+			sSwapHashResizeCondition.Add(&entry);
+			locker.Unlock();
+			entry.Wait();
+			continue;
+		}
+
+		sSwapHashTable.Resize(allocation, size);
+	}
+
+	return B_OK;
 }
 
 
@@ -878,6 +892,8 @@ VMAnonymousCache::_SwapBlockBuild(off_t startPageIndex,
 {
 	WriteLocker locker(sSwapHashLock);
 
+	bool neededResizeBefore = sSwapHashTable.ResizeNeededGuess();
+
 	uint32 left = count;
 	for (uint32 i = 0, j = 0; i < count; i += j) {
 		off_t pageIndex = startPageIndex + i;
@@ -914,6 +930,14 @@ VMAnonymousCache::_SwapBlockBuild(off_t startPageIndex,
 		}
 
 		swap->used += j;
+	}
+
+	bool needsResizeNow = sSwapHashTable.ResizeNeeded();
+
+	locker.Unlock();
+
+	if(!neededResizeBefore && needsResizeNow) {
+		sSwapHashResizeCondition.NotifyOne();
 	}
 }
 
@@ -1400,6 +1424,8 @@ swap_file_delete(const char* path)
 void
 swap_init(void)
 {
+	sSwapHashResizeCondition.Init(&sSwapHashTable, "swap_hash_resize");
+
 	// create swap block cache
 	sSwapBlockCache = create_object_cache("swapblock", sizeof(swap_block),
 		sizeof(void*), NULL, NULL, NULL);
@@ -1417,12 +1443,10 @@ swap_init(void)
 	sSwapHashTable.Init(INITIAL_SWAP_HASH_SIZE);
 	rw_lock_init(&sSwapHashLock, "swaphash");
 
-	error = register_resource_resizer(swap_hash_resizer, NULL,
-		SWAP_HASH_RESIZE_INTERVAL);
-	if (error != B_OK) {
-		panic("swap_init(): Failed to register swap hash resizer: %s",
-			strerror(error));
-	}
+	thread_id thread = spawn_kernel_thread(swap_hash_resizer, "swap_hash_resizer", B_LOW_PRIORITY, nullptr);
+	ASSERT_ALWAYS(thread >= 0);
+
+	resume_thread(thread);
 
 	// init swap file list
 	mutex_init(&sSwapFileListLock, "swaplist");
