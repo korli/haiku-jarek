@@ -14,15 +14,15 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include <ByteOrder.h>
+#include <support/ByteOrder.h>
 
-#include <arch/debug.h>
-#include <arch/debug_console.h>
-#include <debug.h>
-#include <elf.h>
-#include <elf_priv.h>
-#include <smp.h>
-#include <vm/vm.h>
+#include <kernel/arch/debug.h>
+#include <kernel/arch/debug_console.h>
+#include <kernel/debug.h>
+#include <private/kernel/elf.h>
+#include <kernel/elf_priv.h>
+#include <kernel/smp.h>
+#include <kernel/vm/vm.h>
 
 
 enum { INIT = 0, CMDREAD, CKSUM1, CKSUM2, WAITACK, QUIT, GDBSTATES };
@@ -224,9 +224,9 @@ gdb_parse_command(void)
 				// get the segment offsets
 				elf_image_info* kernelImage = elf_get_kernel_image();
 				gdb_reply("Text=%lx;Data=%lx;Bss=%lx",
-					kernelImage->text_region.delta,
-					kernelImage->data_region.delta,
-					kernelImage->data_region.delta);
+					kernelImage->regions[0].delta,
+					kernelImage->regions[0].delta,
+					kernelImage->regions[0].delta);
 			} else
 				gdb_reply("");
 

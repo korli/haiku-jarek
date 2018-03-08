@@ -70,11 +70,12 @@ static const char *
 find_dt_rpath(image_t *image)
 {
 	int i;
-	elf_dyn *d = (elf_dyn *)image->dynamic_ptr;
+	Elf_Dyn *d = (Elf_Dyn *)image->dynamic_ptr;
 
 	for (i = 0; d[i].d_tag != DT_NULL; i++) {
-		if (d[i].d_tag == DT_RPATH)
-			return STRING(image, d[i].d_un.d_val);
+		if (d[i].d_tag == DT_RPATH) {
+			return image->String(d[i].d_un.d_val);
+		}
 	}
 
 	return NULL;
@@ -84,7 +85,7 @@ find_dt_rpath(image_t *image)
 static status_t
 load_immediate_dependencies(image_t *image)
 {
-	elf_dyn *d = (elf_dyn *)image->dynamic_ptr;
+	Elf_Dyn *d = (Elf_Dyn *)image->dynamic_ptr;
 	bool reportErrors = report_errors();
 	status_t status = B_OK;
 	uint32 i, j;
@@ -117,7 +118,7 @@ load_immediate_dependencies(image_t *image)
 			case DT_NEEDED:
 			{
 				int32 neededOffset = d[i].d_un.d_val;
-				const char *name = STRING(image, neededOffset);
+				const char *name = image->String(neededOffset);
 
 				status_t loadStatus = load_image(name, B_LIBRARY_IMAGE,
 					rpath, image->path, &image->needed[j]);
@@ -259,17 +260,29 @@ init_dependencies(image_t *image, bool initHead)
 
 		if (image->preinit_array) {
 			uint count_preinit = image->preinit_array_len / sizeof(addr_t);
-			for (uint j = 0; j < count_preinit; j++)
-				((init_term_function)image->preinit_array[j])(image->id);
+			for (uint j = 0; j < count_preinit; j++) {
+				init_term_function func = (init_term_function)image->preinit_array[j];
+				if(func != (init_term_function)0 && func != (init_term_function)1) {
+					func(image->id);
+				}
+			}
 		}
 
-		if (image->init_routine != 0)
+		if (image->init_routine != 0) {
+			TRACE(("%ld: call init routine: %s\n", find_thread(NULL), image->name));
 			((init_term_function)image->init_routine)(image->id);
+		}
 
 		if (image->init_array) {
 			uint count_init = image->init_array_len / sizeof(addr_t);
-			for (uint j = 0; j < count_init; j++)
-				((init_term_function)image->init_array[j])(image->id);
+			TRACE(("%ld: call init constructors: %s\n", find_thread(NULL), image->name));
+			for (uint j = 0; j < count_init; j++) {
+				init_term_function func = (init_term_function)image->init_array[j];
+				if(func != (init_term_function)0 && func != (init_term_function)1) {
+					TRACE(("%ld: call init constructor: %d %p\n", find_thread(NULL), (int)j, func));
+					func(image->id);
+				}
+			}
 		}
 
 		image_event(image, IMAGE_EVENT_INITIALIZED);
@@ -674,8 +687,8 @@ status_t
 get_nth_symbol(image_id imageID, int32 num, char *nameBuffer,
 	int32 *_nameLength, int32 *_type, void **_location)
 {
-	int32 count = 0, j;
-	uint32 i;
+	int32 count = 0;
+	unsigned long i;
 	image_t *image;
 
 	rld_lock();
@@ -688,36 +701,33 @@ get_nth_symbol(image_id imageID, int32 num, char *nameBuffer,
 	}
 
 	// iterate through all the hash buckets until we've found the one
-	for (i = 0; i < HASHTABSIZE(image); i++) {
-		for (j = HASHBUCKETS(image)[i]; j != STN_UNDEF; j = HASHCHAINS(image)[j]) {
-			elf_sym *symbol = &image->syms[j];
+	for (i = 0; i < image->dynsymcount ; i++) {
+		const Elf_Sym *symbol = &image->syms[i];
 
-			if (count == num) {
-				const char* symbolName = SYMNAME(image, symbol);
-				strlcpy(nameBuffer, symbolName, *_nameLength);
-				*_nameLength = strlen(symbolName);
+		if (count == num) {
+			const char* symbolName = image->SymbolName(symbol);
+			strlcpy(nameBuffer, symbolName, *_nameLength);
+			*_nameLength = strlen(symbolName);
 
-				void* location = (void*)(symbol->st_value
-					+ image->regions[0].delta);
-				int32 type;
-				if (symbol->Type() == STT_FUNC)
-					type = B_SYMBOL_TYPE_TEXT;
-				else if (symbol->Type() == STT_OBJECT)
-					type = B_SYMBOL_TYPE_DATA;
-				else
-					type = B_SYMBOL_TYPE_ANY;
-					// TODO: check with the return types of that BeOS function
+			void* location = (void*)(symbol->st_value + image->regions[0].delta);
+			int32 type;
+			if (ELF_ST_TYPE(symbol->st_info) == STT_FUNC)
+				type = B_SYMBOL_TYPE_TEXT;
+			else if (ELF_ST_TYPE(symbol->st_info) == STT_OBJECT)
+				type = B_SYMBOL_TYPE_DATA;
+			else
+				type = B_SYMBOL_TYPE_ANY;
+				// TODO: check with the return types of that BeOS function
 
-				patch_defined_symbol(image, symbolName, &location, &type);
+			patch_defined_symbol(image, symbolName, &location, &type);
 
-				if (_type != NULL)
-					*_type = type;
-				if (_location != NULL)
-					*_location = location;
-				goto out;
-			}
-			count++;
+			if (_type != NULL)
+				*_type = type;
+			if (_location != NULL)
+				*_location = location;
+			goto out;
 		}
+		count++;
 	}
 out:
 	rld_unlock();
@@ -731,7 +741,7 @@ out:
 
 status_t
 get_nearest_symbol_at_address(void* address, image_id* _imageID,
-	char** _imagePath, char** _imageName, char** _symbolName, int32* _type,
+	char** _imagePath, char** _imageName, const char** _symbolName, int32* _type,
 	void** _location, bool* _exactMatch)
 {
 	rld_lock();
@@ -743,24 +753,21 @@ get_nearest_symbol_at_address(void* address, image_id* _imageID,
 	}
 
 	bool exactMatch = false;
-	elf_sym* foundSymbol = NULL;
+	const Elf_Sym* foundSymbol = NULL;
 	addr_t foundLocation = (addr_t)NULL;
 
-	for (uint32 i = 0; i < HASHTABSIZE(image) && !exactMatch; i++) {
-		for (int32 j = HASHBUCKETS(image)[i]; j != STN_UNDEF;
-				j = HASHCHAINS(image)[j]) {
-			elf_sym *symbol = &image->syms[j];
-			addr_t location = symbol->st_value + image->regions[0].delta;
+	for (uint32 i = 0; i < image->dynsymcount && !exactMatch; i++) {
+		const Elf_Sym *symbol = &image->syms[i];
+		addr_t location = symbol->st_value + image->regions[0].delta;
 
-			if (location <= (addr_t)address	&& location >= foundLocation) {
-				foundSymbol = symbol;
-				foundLocation = location;
+		if (location <= (addr_t)address	&& location >= foundLocation) {
+			foundSymbol = symbol;
+			foundLocation = location;
 
-				// jump out if we have an exact match
-				if (location + symbol->st_size > (addr_t)address) {
-					exactMatch = true;
-					break;
-				}
+			// jump out if we have an exact match
+			if (location + symbol->st_size > (addr_t)address) {
+				exactMatch = true;
+				break;
 			}
 		}
 	}
@@ -775,12 +782,12 @@ get_nearest_symbol_at_address(void* address, image_id* _imageID,
 		*_exactMatch = exactMatch;
 
 	if (foundSymbol != NULL) {
-		*_symbolName = SYMNAME(image, foundSymbol);
+		*_symbolName = image->SymbolName(foundSymbol);
 
 		if (_type != NULL) {
-			if (foundSymbol->Type() == STT_FUNC)
+			if (ELF_ST_TYPE(foundSymbol->st_info) == STT_FUNC)
 				*_type = B_SYMBOL_TYPE_TEXT;
-			else if (foundSymbol->Type() == STT_OBJECT)
+			else if (ELF_ST_TYPE(foundSymbol->st_info) == STT_OBJECT)
 				*_type = B_SYMBOL_TYPE_DATA;
 			else
 				*_type = B_SYMBOL_TYPE_ANY;
@@ -856,14 +863,14 @@ get_library_symbol(void* handle, void* caller, const char* symbolName,
 	if (handle == RTLD_DEFAULT || handle == RLD_GLOBAL_SCOPE) {
 		// look in the default scope
 		image_t* image;
-		elf_sym* symbol = find_undefined_symbol_global(gProgramImage,
+		const Elf_Sym* symbol = find_undefined_symbol_global(gProgramImage,
 			gProgramImage,
 			SymbolLookupInfo(symbolName, B_SYMBOL_TYPE_ANY, NULL,
 				LOOKUP_FLAG_DEFAULT_VERSION),
 			&image);
 		if (symbol != NULL) {
 			*_location = (void*)(symbol->st_value + image->regions[0].delta);
-			int32 symbolType = symbol->Type() == STT_FUNC
+			int32 symbolType = ELF_ST_TYPE(symbol->st_info) == STT_FUNC
 				? B_SYMBOL_TYPE_TEXT : B_SYMBOL_TYPE_DATA;
 			patch_defined_symbol(image, symbolName, _location, &symbolType);
 			status = B_OK;
@@ -889,7 +896,7 @@ get_library_symbol(void* handle, void* caller, const char* symbolName,
 			bool hitCallerImage = false;
 			set_image_flags_recursively(callerImage, RFLAG_USE_FOR_RESOLVING);
 
-			elf_sym* candidateSymbol = NULL;
+			const Elf_Sym* candidateSymbol = NULL;
 			image_t* candidateImage = NULL;
 
 			image_t* image = get_loaded_images().head;
@@ -908,14 +915,14 @@ get_library_symbol(void* handle, void* caller, const char* symbolName,
 					continue;
 				}
 
-				elf_sym *symbol = find_symbol(image,
+				const Elf_Sym *symbol = find_symbol(image,
 					SymbolLookupInfo(symbolName, B_SYMBOL_TYPE_TEXT, NULL,
 						LOOKUP_FLAG_DEFAULT_VERSION));
 				if (symbol == NULL)
 					continue;
 
 				// found a symbol
-				bool isWeak = symbol->Bind() == STB_WEAK;
+				bool isWeak = ELF_ST_BIND(symbol->st_info) == STB_WEAK;
 				if (candidateImage == NULL || !isWeak) {
 					candidateSymbol = symbol;
 					candidateImage = image;
@@ -957,7 +964,7 @@ status_t
 get_next_image_dependency(image_id id, uint32 *cookie, const char **_name)
 {
 	uint32 i, j, searchIndex = *cookie;
-	elf_dyn *dynamicSection;
+	Elf_Dyn *dynamicSection;
 	image_t *image;
 
 	if (_name == NULL)
@@ -971,7 +978,7 @@ get_next_image_dependency(image_id id, uint32 *cookie, const char **_name)
 		return B_BAD_IMAGE_ID;
 	}
 
-	dynamicSection = (elf_dyn *)image->dynamic_ptr;
+	dynamicSection = (Elf_Dyn *)image->dynamic_ptr;
 	if (dynamicSection == NULL || image->num_needed <= searchIndex) {
 		rld_unlock();
 		return B_ENTRY_NOT_FOUND;
@@ -984,7 +991,7 @@ get_next_image_dependency(image_id id, uint32 *cookie, const char **_name)
 		if (j++ == searchIndex) {
 			int32 neededOffset = dynamicSection[i].d_un.d_val;
 
-			*_name = STRING(image, neededOffset);
+			*_name = image->String(neededOffset);
 			*cookie = searchIndex + 1;
 			rld_unlock();
 			return B_OK;
@@ -995,6 +1002,71 @@ get_next_image_dependency(image_id id, uint32 *cookie, const char **_name)
 	return B_ENTRY_NOT_FOUND;
 }
 
+int dl_iterate_phdr(__dl_iterate_hdr_callback callback, void * arg)
+{
+	int32 cookie = 0;
+	image_info info;
+	struct dl_phdr_info ph_info;
+
+	rld_lock();
+	while (_kern_get_next_image_info(B_CURRENT_TEAM, &cookie, &info, sizeof(image_info)) == B_OK) {
+		// for now, just do stupid simple global locking
+
+		// get the image from those who have been already initialized
+		image_t * image = find_loaded_image_by_id(info.id, false);
+		if (image) {
+			ph_info.dlpi_addr = image->regions[0].delta;
+			ph_info.dlpi_name = image->name;
+			ph_info.dlpi_phdr = image->program_headers;
+			ph_info.dlpi_phnum = image->program_headers_count;
+			ph_info.dlpi_adds = image->ref_count;
+			ph_info.dlpi_subs = 0;
+			ph_info.dlpi_tls_modid = image->dso_tls_id;
+			ph_info.dlpi_tls_data = get_tls_address(image->dso_tls_id, 0);
+
+			atomic_add(&image->ref_count, 1);
+			rld_unlock();
+
+			int error = callback(&ph_info, sizeof(ph_info), arg);
+
+			rld_lock();
+			put_image(image);
+
+			if(error != 0) {
+				rld_unlock();
+				return error;
+			}
+		}
+	}
+	rld_unlock();
+
+	return 0;
+}
+
+int _rtld_addr_phdr(const void * address, struct dl_phdr_info * ph_info)
+{
+	rld_lock();
+
+	image_t* image = find_loaded_image_by_address((addr_t)address);
+
+	if (image == NULL) {
+		rld_unlock();
+		return 0;
+	}
+
+	ph_info->dlpi_addr = image->regions[0].delta;
+	ph_info->dlpi_name = image->name;
+	ph_info->dlpi_phdr = image->program_headers;
+	ph_info->dlpi_phnum = image->program_headers_count;
+	ph_info->dlpi_adds = image->ref_count;
+	ph_info->dlpi_subs = 0;
+	ph_info->dlpi_tls_modid = image->dso_tls_id;
+	ph_info->dlpi_tls_data = get_tls_address(image->dso_tls_id, 0);
+
+	rld_unlock();
+
+	return 1;
+}
 
 //	#pragma mark - runtime_loader private exports
 
@@ -1005,10 +1077,10 @@ elf_verify_header(void *header, size_t length)
 {
 	int32 programSize, sectionSize;
 
-	if (length < sizeof(elf_ehdr))
+	if (length < sizeof(Elf_Ehdr))
 		return B_NOT_AN_EXECUTABLE;
 
-	return parse_elf_header((elf_ehdr *)header, &programSize, &sectionSize);
+	return parse_elf_header((Elf_Ehdr *)header, &programSize, &sectionSize);
 }
 
 

@@ -17,6 +17,7 @@ typedef struct elf32_region {
 	uint32		start;
 	uint32		size;
 	int32		delta;
+	uint32		protection;
 } _PACKED elf32_region;
 
 typedef struct elf64_region {
@@ -24,13 +25,19 @@ typedef struct elf64_region {
 	uint64		start;
 	uint64		size;
 	int64		delta;
+	uint32		protection;
 } _PACKED elf64_region;
+
+#define BOOT_ELF_MAX_REGIONS			8
 
 struct preloaded_image {
 	FixedWidthPointer<struct preloaded_image> next;
 	FixedWidthPointer<char> name;
 	uint8		elf_class;
 	addr_range	dynamic_section;
+#ifdef __ARM__
+	addr_range	exidx_section;
+#endif
 
 	FixedWidthPointer<char> debug_string_table;
 	uint32		num_debug_symbols;
@@ -45,8 +52,8 @@ struct preloaded_image {
 
 struct preloaded_elf32_image : public preloaded_image {
 	Elf32_Ehdr	elf_header;
-	elf32_region text_region;
-	elf32_region data_region;
+	elf32_region regions[BOOT_ELF_MAX_REGIONS];
+	uint32		 count_regions;
 
 	FixedWidthPointer<Elf32_Sym> syms;
 	FixedWidthPointer<Elf32_Rel> rel;
@@ -58,12 +65,16 @@ struct preloaded_elf32_image : public preloaded_image {
 	int32		pltrel_type;
 
 	FixedWidthPointer<Elf32_Sym> debug_symbols;
+
+	inline const Elf32_Sym* Symbol(size_t index) const {
+		return &syms[index];
+	}
 } _PACKED;
 
 struct preloaded_elf64_image : public preloaded_image {
 	Elf64_Ehdr	elf_header;
-	elf64_region text_region;
-	elf64_region data_region;
+	elf64_region regions[BOOT_ELF_MAX_REGIONS];
+	uint32		 count_regions;
 
 	FixedWidthPointer<Elf64_Sym> syms;
 	FixedWidthPointer<Elf64_Rel> rel;
@@ -75,6 +86,10 @@ struct preloaded_elf64_image : public preloaded_image {
 	int64		pltrel_type;
 
 	FixedWidthPointer<Elf64_Sym> debug_symbols;
+
+	inline const Elf64_Sym* Symbol(size_t index) const {
+		return &syms[index];
+	}
 } _PACKED;
 
 
@@ -87,11 +102,11 @@ typedef preloaded_elf32_image preloaded_elf_image;
 
 #ifdef _BOOT_MODE
 extern status_t boot_elf_resolve_symbol(preloaded_elf32_image* image,
-	Elf32_Sym* symbol, Elf32_Addr* symbolAddress);
+	const Elf32_Sym* symbol, Elf32_Addr* symbolAddress);
 extern status_t boot_elf_resolve_symbol(preloaded_elf64_image* image,
-	Elf64_Sym* symbol, Elf64_Addr* symbolAddress);
+	const Elf64_Sym* symbol, Elf64_Addr* symbolAddress);
 extern void boot_elf64_set_relocation(Elf64_Addr resolveAddress,
-	Elf64_Addr finalAddress);
+	const Elf64_Addr finalAddress);
 #endif
 
 #endif	/* KERNEL_BOOT_ELF_H */

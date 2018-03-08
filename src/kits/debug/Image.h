@@ -8,11 +8,11 @@
 
 #include <stdio.h>
 
-#include <elf_private.h>
-#include <image.h>
-#include <OS.h>
+#include <system/elf_private.h>
+#include <kernel/image.h>
+#include <kernel/OS.h>
 
-#include <util/DoublyLinkedList.h>
+#include <kernel/util/DoublyLinkedList.h>
 
 
 struct image_t;
@@ -35,7 +35,7 @@ public:
 				{ return (addr_t)fInfo.text; }
 			size_t				TextSize() const	{ return fInfo.text_size; }
 
-	virtual	const elf_sym*		LookupSymbol(addr_t address,
+	virtual	const Elf_Sym*		LookupSymbol(addr_t address,
 									addr_t* _baseAddress,
 									const char** _symbolName,
 									size_t *_symbolNameLen,
@@ -60,7 +60,7 @@ public:
 								SymbolTableBasedImage();
 	virtual						~SymbolTableBasedImage();
 
-	virtual	const elf_sym*		LookupSymbol(addr_t address,
+	virtual	const Elf_Sym*		LookupSymbol(addr_t address,
 									addr_t* _baseAddress,
 									const char** _symbolName,
 									size_t *_symbolNameLen,
@@ -76,7 +76,7 @@ protected:
 
 protected:
 			addr_t				fLoadDelta;
-			elf_sym*			fSymbolTable;
+			Elf_Sym*			fSymbolTable;
 			char*				fStringTable;
 			int32				fSymbolCount;
 			size_t				fStringTableSize;
@@ -96,7 +96,7 @@ private:
 									addr_t* _textAddress, size_t* _textSize,
 									addr_t* _dataAddress, size_t* _dataSize);
 
-			status_t			_FindTableInSection(elf_ehdr* elfHeader,
+			status_t			_FindTableInSection(Elf_Ehdr* elfHeader,
 									uint16 sectionType);
 
 private:

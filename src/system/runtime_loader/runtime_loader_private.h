@@ -68,7 +68,7 @@ status_t unload_library(void* handle, image_id imageID, bool addOn);
 status_t get_nth_symbol(image_id imageID, int32 num, char* nameBuffer,
 	int32* _nameLength, int32* _type, void** _location);
 status_t get_nearest_symbol_at_address(void* address, image_id* _imageID,
-	char** _imagePath, char** _imageName, char** _symbolName, int32* _type,
+	char** _imagePath, char** _imageName, const char** _symbolName, int32* _type,
 	void** _location, bool* _exactMatch);
 status_t get_symbol(image_id imageID, char const* symbolName, int32 symbolType,
 	bool recursive, image_id* _inImage, void** _location);
@@ -76,7 +76,7 @@ status_t get_library_symbol(void* handle, void* caller, const char* symbolName,
 	void** _location);
 status_t get_next_image_dependency(image_id id, uint32* cookie,
 	const char** _name);
-int resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
+int resolve_symbol(image_t* rootImage, image_t* image, const Elf_Sym* sym,
 	SymbolLookupCache* cache, addr_t* sym_addr, image_t** symbolImage = NULL);
 
 

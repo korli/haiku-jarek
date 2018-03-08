@@ -14,8 +14,8 @@
 
 #include <new>
 
-#include <runtime_loader.h>
-#include <syscalls.h>
+#include <runtime_loader/runtime_loader.h>
+#include <system/syscalls.h>
 
 
 using namespace BPrivate::Debug;
@@ -82,17 +82,17 @@ SymbolTableBasedImage::~SymbolTableBasedImage()
 }
 
 
-const elf_sym*
+const Elf_Sym*
 SymbolTableBasedImage::LookupSymbol(addr_t address, addr_t* _baseAddress,
 	const char** _symbolName, size_t *_symbolNameLen, bool *_exactMatch) const
 {
-	const elf_sym* symbolFound = NULL;
+	const Elf_Sym* symbolFound = NULL;
 	const char* symbolName = NULL;
 	bool exactMatch = false;
 	addr_t deltaFound = ~(addr_t)0;
 
 	for (int32 i = 0; i < fSymbolCount; i++) {
-		const elf_sym* symbol = &fSymbolTable[i];
+		const Elf_Sym* symbol = &fSymbolTable[i];
 
 		if (symbol->st_value == 0
 			|| symbol->st_size >= (size_t)fInfo.text_size + fInfo.data_size) {
@@ -141,9 +141,9 @@ SymbolTableBasedImage::NextSymbol(int32& iterator, const char** _symbolName,
 		if (++iterator >= fSymbolCount)
 			return B_ENTRY_NOT_FOUND;
 
-		const elf_sym* symbol = &fSymbolTable[iterator];
+		const Elf_Sym* symbol = &fSymbolTable[iterator];
 
-		if ((symbol->Type() != STT_FUNC && symbol->Type() != STT_OBJECT)
+		if ((ELF_ST_TYPE(symbol->st_info) != STT_FUNC && ELF_ST_TYPE(symbol->st_info) != STT_OBJECT)
 			|| symbol->st_value == 0) {
 			continue;
 		}
@@ -152,7 +152,7 @@ SymbolTableBasedImage::NextSymbol(int32& iterator, const char** _symbolName,
 		*_symbolNameLen = _SymbolNameLen(*_symbolName);
 		*_symbolAddress = symbol->st_value + fLoadDelta;
 		*_symbolSize = symbol->st_size;
-		*_symbolType = symbol->Type() == STT_FUNC ? B_SYMBOL_TYPE_TEXT
+		*_symbolType = ELF_ST_TYPE(symbol->st_info) == STT_FUNC ? B_SYMBOL_TYPE_TEXT
 			: B_SYMBOL_TYPE_DATA;
 
 		return B_OK;
@@ -267,7 +267,7 @@ ImageFile::_LoadFile(const char* path, addr_t* _textAddress, size_t* _textSize,
 		return errno;
 
 	fFileSize = st.st_size;
-	if (fFileSize < (off_t)sizeof(elf_ehdr))
+	if (fFileSize < (off_t)sizeof(Elf_Ehdr))
 		return B_NOT_AN_EXECUTABLE;
 
 	// map it
@@ -276,7 +276,7 @@ ImageFile::_LoadFile(const char* path, addr_t* _textAddress, size_t* _textSize,
 		return errno;
 
 	// examine the elf header
-	elf_ehdr* elfHeader = (elf_ehdr*)fMappedFile;
+	Elf_Ehdr* elfHeader = (Elf_Ehdr*)fMappedFile;
 	if (memcmp(elfHeader->e_ident, ELFMAG, 4) != 0)
 		return B_NOT_AN_EXECUTABLE;
 
@@ -285,21 +285,21 @@ ImageFile::_LoadFile(const char* path, addr_t* _textAddress, size_t* _textSize,
 
 	// verify the location of the program headers
 	int32 programHeaderCount = elfHeader->e_phnum;
-	if (elfHeader->e_phoff < sizeof(elf_ehdr)
-		|| elfHeader->e_phentsize < sizeof(elf_phdr)
+	if (elfHeader->e_phoff < sizeof(Elf_Ehdr)
+		|| elfHeader->e_phentsize < sizeof(Elf_Phdr)
 		|| (off_t)(elfHeader->e_phoff + programHeaderCount
 				* elfHeader->e_phentsize)
 			> fFileSize) {
 		return B_NOT_AN_EXECUTABLE;
 	}
 
-	elf_phdr* programHeaders
-		= (elf_phdr*)(fMappedFile + elfHeader->e_phoff);
+	Elf_Phdr* programHeaders
+		= (Elf_Phdr*)(fMappedFile + elfHeader->e_phoff);
 
 	// verify the location of the section headers
 	int32 sectionCount = elfHeader->e_shnum;
-	if (elfHeader->e_shoff < sizeof(elf_ehdr)
-		|| elfHeader->e_shentsize < sizeof(elf_shdr)
+	if (elfHeader->e_shoff < sizeof(Elf_Ehdr)
+		|| elfHeader->e_shentsize < sizeof(Elf_Shdr)
 		|| (off_t)(elfHeader->e_shoff + sectionCount * elfHeader->e_shentsize)
 			> fFileSize) {
 		return B_NOT_AN_EXECUTABLE;
@@ -311,10 +311,10 @@ ImageFile::_LoadFile(const char* path, addr_t* _textAddress, size_t* _textSize,
 	*_dataAddress = 0;
 	*_dataSize = 0;
 	for (int32 i = 0; i < programHeaderCount; i++) {
-		elf_phdr* header = (elf_phdr*)
+		Elf_Phdr* header = (Elf_Phdr*)
 			((uint8*)programHeaders + i * elfHeader->e_phentsize);
 		if (header->p_type == PT_LOAD) {
-			if ((header->p_flags & PF_WRITE) == 0) {
+			if ((header->p_flags & PF_W) == 0) {
 				*_textAddress = header->p_vaddr;
 				*_textSize = header->p_memsz;
 			} else {
@@ -334,18 +334,18 @@ ImageFile::_LoadFile(const char* path, addr_t* _textAddress, size_t* _textSize,
 
 
 status_t
-ImageFile::_FindTableInSection(elf_ehdr* elfHeader, uint16 sectionType)
+ImageFile::_FindTableInSection(Elf_Ehdr* elfHeader, uint16 sectionType)
 {
-	elf_shdr* sectionHeaders
-		= (elf_shdr*)(fMappedFile + elfHeader->e_shoff);
+	Elf_Shdr* sectionHeaders
+		= (Elf_Shdr*)(fMappedFile + elfHeader->e_shoff);
 
 	// find the symbol table
 	for (int32 i = 0; i < elfHeader->e_shnum; i++) {
-		elf_shdr* sectionHeader = (elf_shdr*)
+		Elf_Shdr* sectionHeader = (Elf_Shdr*)
 			((uint8*)sectionHeaders + i * elfHeader->e_shentsize);
 
 		if (sectionHeader->sh_type == sectionType) {
-			elf_shdr& stringHeader = *(elf_shdr*)
+			Elf_Shdr& stringHeader = *(Elf_Shdr*)
 				((uint8*)sectionHeaders
 					+ sectionHeader->sh_link * elfHeader->e_shentsize);
 
@@ -359,9 +359,9 @@ ImageFile::_FindTableInSection(elf_ehdr* elfHeader, uint16 sectionType)
 				return B_BAD_DATA;
 			}
 
-			fSymbolTable = (elf_sym*)(fMappedFile + sectionHeader->sh_offset);
+			fSymbolTable = (Elf_Sym*)(fMappedFile + sectionHeader->sh_offset);
 			fStringTable = (char*)(fMappedFile + stringHeader.sh_offset);
-			fSymbolCount = sectionHeader->sh_size / sizeof(elf_sym);
+			fSymbolCount = sectionHeader->sh_size / sizeof(Elf_Sym);
 			fStringTableSize = stringHeader.sh_size;
 
 			return B_OK;
@@ -401,7 +401,7 @@ KernelImage::Init(const image_info& info)
 		return error;
 
 	// allocate the tables
-	fSymbolTable = new(std::nothrow) elf_sym[fSymbolCount];
+	fSymbolTable = new(std::nothrow) Elf_Sym[fSymbolCount];
 	fStringTable = new(std::nothrow) char[fStringTableSize];
 	if (fSymbolTable == NULL || fStringTable == NULL)
 		return B_NO_MEMORY;
@@ -455,7 +455,7 @@ CommPageImage::Init(const image_info& info)
 		return error;
 
 	// allocate the tables
-	fSymbolTable = new(std::nothrow) elf_sym[fSymbolCount];
+	fSymbolTable = new(std::nothrow) Elf_Sym[fSymbolCount];
 	fStringTable = new(std::nothrow) char[fStringTableSize];
 	if (fSymbolTable == NULL || fStringTable == NULL)
 		return B_NO_MEMORY;

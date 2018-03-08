@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-#include <image.h>
+#include <kernel/image.h>
 
 
 static const size_t kMaxSymbolNameLength = 64 * 1024;
@@ -227,7 +227,7 @@ public:
 
 			// check, if it is a function or a data object and defined
 			// Note: Type() operates on a uint8, so byte order is irrelevant.
-			if ((symbol.Type() != STT_FUNC && symbol.Type() != STT_OBJECT)
+			if ((ElfClass::ST_TYPE(symbol.st_info) != STT_FUNC && ElfClass::ST_TYPE(symbol.st_info) != STT_OBJECT)
 				|| symbol.st_value == 0) {
 				continue;
 			}
@@ -235,7 +235,7 @@ public:
 			// get the values
 			target_addr_t address = Get(symbol.st_value) + fTextDelta;
 			target_size_t size = Get(symbol.st_size);
-			uint32 type = symbol.Type() == STT_FUNC
+			uint32 type = ElfClass::ST_TYPE(symbol.st_info) == STT_FUNC
 				? B_SYMBOL_TYPE_TEXT : B_SYMBOL_TYPE_DATA;
 
 			// get the symbol name

@@ -4,7 +4,7 @@
  */
 
 
-#include <core_dump.h>
+#include <kernel/core_dump.h>
 
 #include <errno.h>
 #include <string.h>
@@ -13,23 +13,23 @@
 #include <new>
 
 #include <BeBuild.h>
-#include <ByteOrder.h>
+#include <support/ByteOrder.h>
 
-#include <AutoDeleter.h>
+#include <shared/AutoDeleter.h>
 
-#include <commpage.h>
-#include <condition_variable.h>
-#include <elf.h>
-#include <kimage.h>
-#include <ksignal.h>
-#include <team.h>
-#include <thread.h>
-#include <user_debugger.h>
-#include <util/AutoLock.h>
-#include <util/DoublyLinkedList.h>
-#include <vm/vm.h>
-#include <vm/VMArea.h>
-#include <vm/VMCache.h>
+#include <kernel/commpage.h>
+#include <kernel/condition_variable.h>
+#include <private/kernel/elf.h>
+#include <kernel/kimage.h>
+#include <kernel/ksignal.h>
+#include <kernel/team.h>
+#include <kernel/thread.h>
+#include <kernel/user_debugger.h>
+#include <kernel/util/AutoLock.h>
+#include <kernel/util/DoublyLinkedList.h>
+#include <kernel/vm/vm.h>
+#include <kernel/vm/VMArea.h>
+#include <kernel/vm/VMCache.h>
 
 #include "../cache/vnode_store.h"
 #include "../vm/VMAddressSpaceLocking.h"
@@ -261,7 +261,7 @@ struct ImageInfo : DoublyLinkedListLinkImpl<ImageInfo> {
 		fDataSize(image->info.basic_info.data_size),
 		fTextDelta(image->info.text_delta),
 		fSymbolTable((addr_t)image->info.symbol_table),
-		fSymbolHash((addr_t)image->info.symbol_hash),
+		fSymbolHash(image->info.valid_hash_sysv ? (addr_t)image->info.buckets : 0),
 		fStringTable((addr_t)image->info.string_table),
 		fSymbolTableData(NULL),
 		fStringTableData(NULL),
@@ -364,7 +364,7 @@ struct ImageInfo : DoublyLinkedListLinkImpl<ImageInfo> {
 		return fStringTable;
 	}
 
-	elf_sym* SymbolTableData() const
+	Elf_Sym* SymbolTableData() const
 	{
 		return fSymbolTableData;
 	}
@@ -401,7 +401,7 @@ private:
 			return;
 
 		// allocate the tables
-		fSymbolTableData = (elf_sym*)malloc(sizeof(elf_sym) * symbolCount);
+		fSymbolTableData = (Elf_Sym*)malloc(sizeof(Elf_Sym) * symbolCount);
 		fStringTableData = (char*)malloc(stringTableSize);
 		if (fSymbolTableData == NULL || fStringTableData == NULL) {
 			_FreeSymbolData();
@@ -447,7 +447,7 @@ private:
 	addr_t		fSymbolHash;
 	addr_t		fStringTable;
 	// for commpage image
-	elf_sym*	fSymbolTableData;
+	Elf_Sym*	fSymbolTableData;
 	char*		fStringTableData;
 	uint32		fSymbolCount;
 	size_t		fStringTableSize;
@@ -1071,9 +1071,9 @@ private:
 
 		fImageCount = fImageInfos.Count();
 		fSegmentCount = 1 + fAreaCount;
-		fProgramHeadersOffset = sizeof(elf_ehdr);
+		fProgramHeadersOffset = sizeof(Elf_Ehdr);
 		fNoteSegmentOffset = fProgramHeadersOffset
-			+ sizeof(elf_phdr) * fSegmentCount;
+			+ sizeof(Elf_Phdr) * fSegmentCount;
 	}
 
 	ImageInfo* _FindImageInfo(dev_t deviceId, ino_t nodeId) const
@@ -1089,7 +1089,7 @@ private:
 
 	status_t _WriteElfHeader()
 	{
-		elf_ehdr header;
+		Elf_Ehdr header;
 		memset(&header, 0, sizeof(header));
 
 		// e_ident
@@ -1135,9 +1135,9 @@ private:
 		header.e_shoff = 0;
 		header.e_flags = 0;
 		header.e_ehsize = sizeof(header);
-		header.e_phentsize = sizeof(elf_phdr);
+		header.e_phentsize = sizeof(Elf_Phdr);
 		header.e_phnum = fSegmentCount;
-		header.e_shentsize = sizeof(elf_shdr);
+		header.e_shentsize = sizeof(Elf_Shdr);
 		header.e_shnum = 0;
 		header.e_shstrndx = SHN_UNDEF;
 
@@ -1149,7 +1149,7 @@ private:
 		fFile.Seek(fProgramHeadersOffset);
 
 		// write the header for the notes segment
-		elf_phdr header;
+		Elf_Phdr header;
 		memset(&header, 0, sizeof(header));
 		header.p_type = PT_NOTE;
 		header.p_flags = 0;
@@ -1170,11 +1170,11 @@ private:
 			header.p_flags = 0;
 			uint32 protection = areaInfo->Protection();
 			if ((protection & B_READ_AREA) != 0)
-				header.p_flags |= PF_READ;
+				header.p_flags |= PF_R;
 			if ((protection & B_WRITE_AREA) != 0)
-				header.p_flags |= PF_WRITE;
+				header.p_flags |= PF_W;
 			if ((protection & B_EXECUTE_AREA) != 0)
-				header.p_flags |= PF_EXECUTE;
+				header.p_flags |= PF_X;
 			header.p_offset = segmentOffset;
 			header.p_vaddr = areaInfo->Base();
 			header.p_paddr = 0;
@@ -1448,7 +1448,7 @@ private:
 	void _WriteImageSymbolsNote(const ImageInfo* imageInfo, Writer& writer)
 	{
 		uint32 symbolCount = imageInfo->SymbolCount();
-		uint32 symbolEntrySize = (uint32)sizeof(elf_sym);
+		uint32 symbolEntrySize = (uint32)sizeof(Elf_Sym);
 
 		writer.Write((int32)imageInfo->Id());
 		writer.Write(symbolCount);

@@ -72,7 +72,7 @@ public:
 			target_size_t		LoadSize() const	{ return fLoadSize; }
 			uint32				Flags() const		{ return fFlags; }
 			bool				IsWritable() const
-									{ return (fFlags & PF_WRITE) != 0; }
+									{ return (fFlags & PF_W) != 0; }
 
 private:
 			uint64				fFileOffset;
@@ -96,6 +96,9 @@ struct ElfClass32 {
 	typedef Elf32_Note_Area_Entry	NoteAreaEntry;
 	typedef Elf32_Note_Image_Entry	NoteImageEntry;
 	typedef Elf32_Note_Thread_Entry	NoteThreadEntry;
+
+	static inline uint8_t ST_TYPE(uint8_t type) { return ELF32_ST_TYPE(type); }
+	static inline uint8_t ST_BIND(uint8_t type) { return ELF32_ST_BIND(type); }
 };
 
 
@@ -111,6 +114,12 @@ struct ElfClass64 {
 	typedef Elf64_Note_Area_Entry	NoteAreaEntry;
 	typedef Elf64_Note_Image_Entry	NoteImageEntry;
 	typedef Elf64_Note_Thread_Entry	NoteThreadEntry;
+
+	static inline uint8_t ST_TYPE(uint8_t type) { return ELF64_ST_TYPE(type); }
+	static inline uint8_t ST_BIND(uint8_t type) { return ELF64_ST_BIND(type); }
+};
+
+
 namespace BPrivate {
 
 template<int _Size> struct Field_Swapper {

@@ -9,7 +9,7 @@
 
 
 void	analyze_image_haiku_version_and_abi(int fd, image_t* image,
-			elf_ehdr& eheader, int32 sheaderSize, char* buffer,
+			Elf_Ehdr& eheader, int32 sheaderSize, char* buffer,
 			size_t bufferSize);
 
 

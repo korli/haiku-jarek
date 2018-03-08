@@ -17,16 +17,12 @@ extern "C" {
 #endif
 
 extern int arch_elf_relocate_rel(struct elf_image_info *image,
-	struct elf_image_info *resolve_image, elf_rel *rel, int rel_len);
+	struct elf_image_info *resolve_image, Elf_Rel *rel, int rel_len);
 extern int arch_elf_relocate_rela(struct elf_image_info *image,
-	struct elf_image_info *resolve_image, elf_rela *rel, int rel_len);
+	struct elf_image_info *resolve_image, Elf_Rela *rel, int rel_len);
 
 #ifdef __cplusplus
 }
 #endif
-
-
-#include <arch_elf.h>
-
 
 #endif	/* _KERNEL_ARCH_ELF_H */

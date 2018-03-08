@@ -35,14 +35,14 @@ relocate_rel(image_t *rootImage, image_t *image, Elf32_Rel *rel, int rel_len,
 
 		image_t* symbolImage = NULL;
 		if (symbolIndex != 0) {
-			Elf32_Sym* sym = SYMBOL(image, symbolIndex);
+			const Elf32_Sym* sym = image->Symbol(symbolIndex);
 			status_t status = resolve_symbol(rootImage, image, sym, cache, &S,
 					&symbolImage);
 			if (status < B_OK) {
 				TRACE(("resolve symbol \"%s\" returned: %ld\n",
-					SYMNAME(image, sym), status));
+					image->SymbolName(sym), status));
 				printf("resolve symbol \"%s\" returned: %ld\n",
-					SYMNAME(image, sym), status);
+					image->SymbolName(sym), status);
 				return status;
 			}
 		}

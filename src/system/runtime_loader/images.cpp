@@ -165,33 +165,7 @@ topological_sort(image_t* image, uint32 slot, image_t** initList,
 	return slot + 1;
 }
 
-
-/*!	Finds the load address and address specifier of the given image region.
-*/
-static void
-get_image_region_load_address(image_t* image, uint32 index, long lastDelta,
-	bool fixed, addr_t& loadAddress, uint32& addressSpecifier)
-{
-	if (!fixed) {
-		// relocatable image... we can afford to place wherever
-		if (index == 0) {
-			// but only the first segment gets a free ride
-			loadAddress = RLD_PROGRAM_BASE;
-			addressSpecifier = B_RANDOMIZED_BASE_ADDRESS;
-		} else {
-			loadAddress = image->regions[index].vmstart + lastDelta;
-			addressSpecifier = B_EXACT_ADDRESS;
-		}
-	} else {
-		// not relocatable, put it where it asks or die trying
-		loadAddress = image->regions[index].vmstart;
-		addressSpecifier = B_EXACT_ADDRESS;
-	}
-}
-
-
 // #pragma mark -
-
 
 image_t*
 create_image(const char* name, const char* path, int regionCount)
@@ -287,7 +261,7 @@ put_image(image_t* image)
 
 
 status_t
-map_image(int fd, char const* path, image_t* image, bool fixed)
+map_image(int fd, char const* path, image_t* image, Elf_Ehdr& ehdr, bool main_executable)
 {
 	// cut the file name from the path as base name for the created areas
 	const char* baseName = strrchr(path, '/');
@@ -299,72 +273,73 @@ map_image(int fd, char const* path, image_t* image, bool fixed)
 	// determine how much space we need for all loaded segments
 
 	addr_t reservedAddress = 0;
-	addr_t loadAddress;
+	addr_t reservedLimit = 0;
+
 	size_t reservedSize = 0;
-	size_t length = 0;
-	uint32 addressSpecifier = B_RANDOMIZED_ANY_ADDRESS;
+	uint32 addressSpecifier;
 
-	for (uint32 i = 0; i < image->num_regions; i++) {
-		// for BeOS compatibility: if we load an old BeOS executable, we
-		// have to relocate it, if possible - we recognize it because the
-		// vmstart is set to 0 (hopefully always)
-		if (fixed && image->regions[i].vmstart == 0)
-			fixed = false;
+	reservedAddress = image->regions[0].vmstart ? image->regions[0].vmstart : RLD_PROGRAM_BASE;
+	reservedLimit =
+			reservedAddress +
+			(image->regions[image->num_regions - 1].vmstart +
+			 image->regions[image->num_regions - 1].vmsize -
+			 image->regions[0].vmstart);
+	reservedSize = reservedLimit - reservedAddress;
+	addressSpecifier = image->regions[0].vmstart ? B_EXACT_ADDRESS : B_RANDOMIZED_BASE_ADDRESS;
 
-		uint32 regionAddressSpecifier;
-		get_image_region_load_address(image, i,
-			i > 0 ? loadAddress - image->regions[i - 1].vmstart : 0,
-			fixed, loadAddress, regionAddressSpecifier);
-		if (i == 0) {
-			reservedAddress = loadAddress;
-			addressSpecifier = regionAddressSpecifier;
-		}
-
-		length += TO_PAGE_SIZE(image->regions[i].vmsize
-			+ (loadAddress % B_PAGE_SIZE));
-
-		size_t size = TO_PAGE_SIZE(loadAddress + image->regions[i].vmsize)
-			- reservedAddress;
-		if (size > reservedSize)
-			reservedSize = size;
-	}
-
-	// Check whether the segments have an unreasonable amount of unused space
-	// inbetween.
-	if (reservedSize > length + MAX_PAGE_SIZE * 2)
-		return B_BAD_DATA;
+	TRACE(("Reserve address %p -- %p\n", (void *)reservedAddress, (void *)(reservedAddress + reservedLimit)));
 
 	// reserve that space and allocate the areas from that one
-	if (_kern_reserve_address_range(&reservedAddress, addressSpecifier,
-			reservedSize) != B_OK)
+	if (_kern_reserve_address_range(&reservedAddress, addressSpecifier, reservedSize) != B_OK) {
+		FATAL("%s: Can't reserve region %p--%p for image. Something already loaded there\n",
+				path,
+				(void *)reservedAddress,
+				(void *)(reservedAddress + reservedLimit));
+
 		return B_NO_MEMORY;
+	}
+
+	Elf_Addr base_vaddr = image->regions[0].vmstart;
 
 	for (uint32 i = 0; i < image->num_regions; i++) {
 		char regionName[B_OS_NAME_LENGTH];
 
-		snprintf(regionName, sizeof(regionName), "%s_seg%" B_PRIu32 "%s",
-			baseName, i, (image->regions[i].flags & RFLAG_RW) ? "rw" : "ro");
+		Elf_Addr data_offset = PAGE_BASE(image->regions[i].fdstart);
+		Elf_Addr data_vaddr = image->regions[i].vmstart;
+		Elf_Addr data_vlimit = TO_PAGE_SIZE(image->regions[i].vmstart + image->regions[i].fdsize);
+		Elf_Addr data_addr = reservedAddress + (data_vaddr - base_vaddr);
 
-		get_image_region_load_address(image, i,
-			i > 0 ? image->regions[i - 1].delta : 0, fixed, loadAddress,
-			addressSpecifier);
+			if(image->regions[i].flags & RFLAG_ANON) {
+			snprintf(regionName, sizeof(regionName), "%s_bss", baseName);
 
-		// If the image position is arbitrary, we must let it point to the start
-		// of the reserved address range.
-		if (addressSpecifier != B_EXACT_ADDRESS)
-			loadAddress = reservedAddress;
+			void * bssAddress = (void *)data_addr;
 
-		if ((image->regions[i].flags & RFLAG_ANON) != 0) {
+			TRACE(("%s: Create annoymous segment at %p of size %zx\n", path, bssAddress, (size_t)image->regions[i].vmsize));
+
+			uint32 protection = B_READ_AREA |
+				((image->regions[i].flags & RFLAG_RW) != 0 ? B_WRITE_AREA : 0) |
+				((image->regions[i].flags & RFLAG_EXECUTABLE) != 0 ? B_EXECUTE_AREA : 0);
+
 			image->regions[i].id = _kern_create_area(regionName,
-				(void**)&loadAddress, B_EXACT_ADDRESS,
-				image->regions[i].vmsize, B_NO_LOCK,
-				B_READ_AREA | B_WRITE_AREA);
+				(void **)&bssAddress,
+				B_EXACT_ADDRESS,
+				image->regions[i].vmsize,
+				B_NO_LOCK,
+				protection);
 
 			if (image->regions[i].id < 0) {
 				_kern_unreserve_address_range(reservedAddress, reservedSize);
 				return image->regions[i].id;
 			}
 		} else {
+			if(image->regions[i].flags & RFLAG_EXECUTABLE) {
+				snprintf(regionName, sizeof(regionName), "%s_seg%" B_PRIu32 "%s",
+					baseName, i, (image->regions[i].flags & RFLAG_RW) ? "wx" : "ex");
+			} else {
+				snprintf(regionName, sizeof(regionName), "%s_seg%" B_PRIu32 "%s",
+					baseName, i, (image->regions[i].flags & RFLAG_RW) ? "rw" : "ro");
+			}
+
 			// Map all segments r/w first -- write access might be needed for
 			// relocations. When we've done with those we change the protection
 			// of read-only segments back to read-only. We map those segments
@@ -372,11 +347,18 @@ map_image(int fd, char const* path, image_t* image, bool fixed)
 			// number of pages needs to be touched and we want to avoid a lot
 			// of memory to be committed for them temporarily, just because we
 			// have to write map them.
-			uint32 protection = B_READ_AREA | B_WRITE_AREA
-				| ((image->regions[i].flags & RFLAG_RW) != 0
-					? 0 : B_OVERCOMMITTING_AREA);
+			uint32 protection = B_READ_AREA
+				| ((image->regions[i].flags & RFLAG_EXECUTABLE) ? B_EXECUTE_AREA : 0)
+				| ((image->regions[i].flags & RFLAG_RW) != 0 ? B_WRITE_AREA : B_OVERCOMMITTING_AREA);
+
+			void * segmentAddress = (void *)data_addr;
+
+			TRACE(("\"%s\" at %p, 0x%zx bytes (%s)\n", path,
+				(void *)segmentAddress, (size_t)image->regions[i].vmsize,
+				image->regions[i].flags & RFLAG_RW ? "rw" : "read-only"));
+
 			image->regions[i].id = _kern_map_file(regionName,
-				(void**)&loadAddress, B_EXACT_ADDRESS,
+				(void**)&segmentAddress, B_EXACT_ADDRESS,
 				image->regions[i].vmsize, protection, REGION_PRIVATE_MAP, false,
 				fd, PAGE_BASE(image->regions[i].fdstart));
 
@@ -385,30 +367,62 @@ map_image(int fd, char const* path, image_t* image, bool fixed)
 				return image->regions[i].id;
 			}
 
-			TRACE(("\"%s\" at %p, 0x%lx bytes (%s)\n", path,
-				(void *)loadAddress, image->regions[i].vmsize,
-				image->regions[i].flags & RFLAG_RW ? "rw" : "read-only"));
-
 			// handle trailer bits in data segment
-			if (image->regions[i].flags & RFLAG_RW) {
-				addr_t startClearing = loadAddress
+			if(image->regions[i].flags & RFLAG_CLEAR_TRAILER) {
+				addr_t startClearing = data_addr
 					+ PAGE_OFFSET(image->regions[i].start)
 					+ image->regions[i].size;
+
 				addr_t toClear = image->regions[i].vmsize
 					- PAGE_OFFSET(image->regions[i].start)
 					- image->regions[i].size;
 
-				TRACE(("cleared 0x%lx and the following 0x%lx bytes\n",
-					startClearing, toClear));
-				memset((void *)startClearing, 0, toClear);
+				if(toClear > 0) {
+					if(!(protection & B_WRITE_AREA)) {
+						status_t error = _kern_set_memory_protection((void *)PAGE_BASE(startClearing), B_PAGE_SIZE, B_READ_AREA | B_WRITE_AREA);
+						if(error != B_OK) {
+							TRACE(("%s: Can't change region %p -- %p protection (%d) to R/W\n", path,
+									(void *)startClearing,
+									(void *)(startClearing + toClear),
+									error));
+							_kern_unreserve_address_range(reservedAddress, reservedSize);
+							return error;
+						}
+					}
+
+					TRACE(("cleared 0x%lx and the following 0x%lx bytes\n",
+						startClearing, toClear));
+
+					memset((void *)startClearing, 0, toClear);
+
+					if(!(protection & B_WRITE_AREA)) {
+						status_t error = _kern_set_memory_protection((void *)PAGE_BASE(startClearing), B_PAGE_SIZE, protection);
+						if(error != B_OK) {
+							TRACE(("%s: Can't restore region %p -- %p protection (%d)\n", path,
+									(void *)startClearing,
+									(void *)(startClearing + toClear),
+									error));
+							_kern_unreserve_address_range(reservedAddress, reservedSize);
+							return error;
+						}
+					}
+				}
 			}
 		}
 
-		image->regions[i].delta = loadAddress - image->regions[i].vmstart;
-		image->regions[i].vmstart = loadAddress;
+		image->regions[i].delta = data_addr - image->regions[i].vmstart;
+		image->regions[i].vmstart = data_addr;
+
 		if (i == 0) {
-			TLSBlockTemplates::Get().SetBaseAddress(image->dso_tls_id,
-				loadAddress);
+			TLSBlockTemplates::Get().SetBaseAddress(image->dso_tls_id, data_addr);
+		}
+
+		if(!image->program_headers &&
+			data_offset <= ehdr.e_phoff &&
+			(data_vlimit - data_vaddr + data_offset) >= (ehdr.e_phoff + ehdr.e_phnum * sizeof(Elf_Phdr)))
+		{
+			image->program_headers = (Elf_Phdr *)(data_vaddr + ehdr.e_phoff - data_offset + image->regions[0].delta);
+			image->program_headers_count = ehdr.e_phnum;
 		}
 	}
 
@@ -440,24 +454,22 @@ void
 remap_images()
 {
 	for (image_t* image = sLoadedImages.head; image != NULL;
-			image = image->next) {
+			image = image->next)
+	{
+		if (!elf_handle_relro(image))
+			continue;
+
 		for (uint32 i = 0; i < image->num_regions; i++) {
 			// we only need to do this once, so we remember those we've already
 			// mapped
 			if ((image->regions[i].flags & RFLAG_REMAPPED) != 0)
 				continue;
 
-			status_t result = B_OK;
-			if ((image->regions[i].flags & RFLAG_RW) == 0) {
-				result = _kern_set_area_protection(image->regions[i].id,
-						B_READ_AREA | B_EXECUTE_AREA);
-			} else if (image->abi < B_HAIKU_ABI_GCC_2_HAIKU) {
-				result = _kern_set_area_protection(image->regions[i].id,
-						B_READ_AREA | B_WRITE_AREA | B_EXECUTE_AREA);
-			}
+			if ((image->flags & RFLAG_TEXTREL) &&
+				!elf_handle_textrel(image, false))
+				continue;
 
-			if (result == B_OK)
-				image->regions[i].flags |= RFLAG_REMAPPED;
+			image->regions[i].flags |= RFLAG_REMAPPED;
 		}
 	}
 }
@@ -523,9 +535,24 @@ register_image(image_t* image, int fd, const char* path)
 	info.basic_info.api_version = image->api_version;
 	info.basic_info.abi = image->abi;
 	info.text_delta = image->regions[0].delta;
-	info.symbol_table = image->syms;
-	info.symbol_hash = image->symhash;
-	info.string_table = image->strtab;
+	info.symbol_table = (void *)image->syms;
+	info.string_table = (void *)image->strtab;
+
+	info.buckets = image->buckets;
+	info.nbuckets = image->nbuckets;
+	info.chains = image->chains;
+	info.nchains = image->nchains;
+	info.nbuckets_gnu = image->nbuckets_gnu;
+	info.symndx_gnu = image->symndx_gnu;
+	info.maskwords_bm_gnu = image->maskwords_bm_gnu;
+	info.shift2_gnu = image->shift2_gnu;
+	info.dynsymcount = image->dynsymcount;
+	info.bloom_gnu = image->bloom_gnu;
+	info.buckets_gnu = image->buckets_gnu;
+	info.chain_zero_gnu = image->chain_zero_gnu;
+	info.valid_hash_sysv = image->valid_hash_sysv;
+	info.valid_hash_gnu = image->valid_hash_gnu;
+
 	image->id = _kern_register_image(&info, sizeof(info));
 }
 

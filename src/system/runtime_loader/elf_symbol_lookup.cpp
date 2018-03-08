@@ -62,6 +62,21 @@ elf_hash(const char* _name)
 	return hash;
 }
 
+/*
+ * The GNU hash function is the Daniel J. Bernstein hash clipped to 32 bits
+ * unsigned in case it's implemented with a wider type.
+ */
+uint32_t
+gnu_hash(const char *s)
+{
+	uint32_t h;
+	unsigned char c;
+
+	h = 5381;
+	for (c = *s; c != '\0'; c = *++s)
+		h = h * 33 + c;
+	return (h & 0xffffffff);
+}
 
 void
 patch_defined_symbol(image_t* image, const char* name, void** symbol,
@@ -94,133 +109,238 @@ patch_undefined_symbol(image_t* rootImage, image_t* image, const char* name,
 
 
 static bool
-is_symbol_visible(elf_sym* symbol)
+is_symbol_visible(const Elf_Sym* symbol)
 {
-	if (symbol->Bind() == STB_GLOBAL)
+	if (ELF_ST_BIND(symbol->st_info) == STB_GLOBAL)
 		return true;
-	if (symbol->Bind() == STB_WEAK)
+	if (ELF_ST_BIND(symbol->st_info) == STB_WEAK)
+		return true;
+	if (ELF_ST_BIND(symbol->st_info) == STB_GNU_UNIQUE)
 		return true;
 	return false;
 }
 
+static bool matches_symbol(image_t *image,
+		const SymbolLookupInfo& lookupInfo,
+		bool allowLocal,
+		const Elf_Sym * symbol,
+		const Elf_Sym *& versionedSymbol,
+		uint32& versionedSymbolCount,
+		unsigned long symbol_index)
+{
+	const char * sym_name = image->SymbolName(symbol);
 
-elf_sym*
+	switch(ELF_ST_TYPE(symbol->st_info)) {
+	case STT_FUNC:
+	case STT_NOTYPE:
+	case STT_OBJECT:
+	case STT_COMMON:
+	case STT_GNU_IFUNC:
+		if(symbol->st_value == 0)
+			return false;
+		/* fallthrough */
+	case STT_TLS:
+		if (symbol->st_shndx != SHN_UNDEF)
+			break;
+		/* fallthrough */
+	default:
+		return false;
+	}
+
+	if(!allowLocal && !is_symbol_visible(symbol))
+		return false;
+
+	if(lookupInfo.name[0] != sym_name[0])
+		return false;
+
+	if(strcmp(lookupInfo.name, sym_name) != 0)
+		return false;
+
+	// check if the type matches
+	uint32 type = ELF_ST_TYPE(symbol->st_info);
+	if ((lookupInfo.type == B_SYMBOL_TYPE_TEXT && type != STT_FUNC)
+		|| (lookupInfo.type == B_SYMBOL_TYPE_DATA && type != STT_OBJECT))
+	{
+		return false;
+	}
+
+	// check the version
+
+	// Handle the simple cases -- the image doesn't have version
+	// information -- first.
+	if (image->symbol_versions == NULL) {
+		if (lookupInfo.version == NULL) {
+			// No specific symbol version was requested either, so the
+			// symbol is just fine.
+			return true;
+		}
+
+		// A specific version is requested. If it's the dependency
+		// referred to by the requested version, it's apparently an
+		// older version of the dependency and we're not happy.
+		if (equals_image_name(image, lookupInfo.version->file_name)) {
+			// TODO: That should actually be kind of fatal!
+			return false;
+		}
+
+		// This is some other image. We accept the symbol.
+		return true;
+	}
+
+	// The image has version information. Let's see what we've got.
+	uint32 versionID = image->symbol_versions[symbol_index];
+	uint32 versionIndex = VER_NDX(versionID);
+	elf_version_info& version = image->versions[versionIndex];
+
+	// skip local versions
+	if (versionIndex == VER_NDX_LOCAL)
+		return false;
+
+	if (lookupInfo.version != NULL) {
+		// a specific version is requested
+
+		// compare the versions
+		if (version.hash == lookupInfo.version->hash
+			&& strcmp(version.name, lookupInfo.version->name) == 0) {
+			// versions match
+			return true;
+		}
+
+		// The versions don't match. We're still fine with the
+		// base version, if it is public and we're not looking for
+		// the default version.
+		if ((versionID & VER_NDX_HIDDEN) == 0
+			&& versionIndex == VER_NDX_GLOBAL
+			&& (lookupInfo.flags & LOOKUP_FLAG_DEFAULT_VERSION)
+				== 0) {
+			// TODO: Revise the default version case! That's how
+			// FreeBSD implements it, but glibc doesn't handle it
+			// specially.
+			return true;
+		}
+	} else {
+		// No specific version requested, but the image has version
+		// information. This can happen in either of these cases:
+		//
+		// * The dependent object was linked against an older version
+		//   of the now versioned dependency.
+		// * The symbol is looked up via find_image_symbol() or dlsym().
+		//
+		// In the first case we return the base version of the symbol
+		// (VER_NDX_GLOBAL or VER_NDX_GIVEN), or, if that doesn't
+		// exist, the unique, non-hidden versioned symbol.
+		//
+		// In the second case we want to return the public default
+		// version of the symbol. The handling is pretty similar to the
+		// first case, with the exception that we treat VER_NDX_GIVEN
+		// as regular version.
+
+		// VER_NDX_GLOBAL is always good, VER_NDX_GIVEN is fine, if
+		// we don't look for the default version.
+		if (versionIndex == VER_NDX_GLOBAL
+			|| ((lookupInfo.flags & LOOKUP_FLAG_DEFAULT_VERSION) == 0
+				&& versionIndex == VER_NDX_GIVEN)) {
+			return true;
+		}
+
+		// If not hidden, remember the version -- we'll return it, if
+		// it is the only one.
+		if ((versionID & VER_NDX_HIDDEN) == 0) {
+			versionedSymbolCount++;
+			versionedSymbol = symbol;
+		}
+	}
+
+	return false;
+}
+
+const Elf_Sym*
 find_symbol(image_t* image, const SymbolLookupInfo& lookupInfo, bool allowLocal)
 {
 	if (image->dynamic_ptr == 0)
 		return NULL;
 
-	elf_sym* versionedSymbol = NULL;
+	const Elf_Sym* versionedSymbol = NULL;
 	uint32 versionedSymbolCount = 0;
+	const Elf_Sym * sym;
 
-	uint32 bucket = lookupInfo.hash % HASHTABSIZE(image);
+	if(image->valid_hash_sysv) {
+		unsigned long symnum;
 
-	for (uint32 i = HASHBUCKETS(image)[bucket]; i != STN_UNDEF;
-			i = HASHCHAINS(image)[i]) {
-		elf_sym* symbol = &image->syms[i];
+		for(symnum = image->buckets[lookupInfo.hash % image->nbuckets] ;
+				symnum != STN_UNDEF ;
+				symnum = image->chains[symnum])
+		{
+			if(symnum >= image->nchains)
+				return NULL;
 
-		if (symbol->st_shndx != SHN_UNDEF
-			&& (allowLocal || is_symbol_visible(symbol))
-			&& !strcmp(SYMNAME(image, symbol), lookupInfo.name)) {
+			sym = image->Symbol(symnum);
 
-			// check if the type matches
-			uint32 type = symbol->Type();
-			if ((lookupInfo.type == B_SYMBOL_TYPE_TEXT && type != STT_FUNC)
-				|| (lookupInfo.type == B_SYMBOL_TYPE_DATA
-					&& type != STT_OBJECT)) {
-				continue;
-			}
-
-			// check the version
-
-			// Handle the simple cases -- the image doesn't have version
-			// information -- first.
-			if (image->symbol_versions == NULL) {
-				if (lookupInfo.version == NULL) {
-					// No specific symbol version was requested either, so the
-					// symbol is just fine.
-					return symbol;
-				}
-
-				// A specific version is requested. If it's the dependency
-				// referred to by the requested version, it's apparently an
-				// older version of the dependency and we're not happy.
-				if (equals_image_name(image, lookupInfo.version->file_name)) {
-					// TODO: That should actually be kind of fatal!
-					return NULL;
-				}
-
-				// This is some other image. We accept the symbol.
-				return symbol;
-			}
-
-			// The image has version information. Let's see what we've got.
-			uint32 versionID = image->symbol_versions[i];
-			uint32 versionIndex = VER_NDX(versionID);
-			elf_version_info& version = image->versions[versionIndex];
-
-			// skip local versions
-			if (versionIndex == VER_NDX_LOCAL)
-				continue;
-
-			if (lookupInfo.version != NULL) {
-				// a specific version is requested
-
-				// compare the versions
-				if (version.hash == lookupInfo.version->hash
-					&& strcmp(version.name, lookupInfo.version->name) == 0) {
-					// versions match
-					return symbol;
-				}
-
-				// The versions don't match. We're still fine with the
-				// base version, if it is public and we're not looking for
-				// the default version.
-				if ((versionID & VER_NDX_FLAG_HIDDEN) == 0
-					&& versionIndex == VER_NDX_GLOBAL
-					&& (lookupInfo.flags & LOOKUP_FLAG_DEFAULT_VERSION)
-						== 0) {
-					// TODO: Revise the default version case! That's how
-					// FreeBSD implements it, but glibc doesn't handle it
-					// specially.
-					return symbol;
-				}
-			} else {
-				// No specific version requested, but the image has version
-				// information. This can happen in either of these cases:
-				//
-				// * The dependent object was linked against an older version
-				//   of the now versioned dependency.
-				// * The symbol is looked up via find_image_symbol() or dlsym().
-				//
-				// In the first case we return the base version of the symbol
-				// (VER_NDX_GLOBAL or VER_NDX_INITIAL), or, if that doesn't
-				// exist, the unique, non-hidden versioned symbol.
-				//
-				// In the second case we want to return the public default
-				// version of the symbol. The handling is pretty similar to the
-				// first case, with the exception that we treat VER_NDX_INITIAL
-				// as regular version.
-
-				// VER_NDX_GLOBAL is always good, VER_NDX_INITIAL is fine, if
-				// we don't look for the default version.
-				if (versionIndex == VER_NDX_GLOBAL
-					|| ((lookupInfo.flags & LOOKUP_FLAG_DEFAULT_VERSION) == 0
-						&& versionIndex == VER_NDX_INITIAL)) {
-					return symbol;
-				}
-
-				// If not hidden, remember the version -- we'll return it, if
-				// it is the only one.
-				if ((versionID & VER_NDX_FLAG_HIDDEN) == 0) {
-					versionedSymbolCount++;
-					versionedSymbol = symbol;
-				}
+			if(matches_symbol(image,
+					lookupInfo,
+					allowLocal,
+					sym,
+					versionedSymbol,
+					versionedSymbolCount,
+					symnum))
+			{
+				return sym;
 			}
 		}
 	}
 
-	return versionedSymbolCount == 1 ? versionedSymbol : NULL;
+	if(image->valid_hash_gnu) {
+		Elf_Addr bloom_word;
+		const Elf32_Word *hashval;
+		Elf32_Word bucket;
+		unsigned int h1, h2;
+		unsigned long symnum;
+
+		uint32 hash_gnu = lookupInfo.hash_gnu;
+
+		/* Pick right bitmask word from Bloom filter array */
+		bloom_word = image->bloom_gnu[(hash_gnu / __ELF_WORD_SIZE) & image->maskwords_bm_gnu];
+
+		/* Calculate modulus word size of gnu hash and its derivative */
+		h1 = hash_gnu & (__ELF_WORD_SIZE - 1);
+		h2 = ((hash_gnu >> image->shift2_gnu) & (__ELF_WORD_SIZE - 1));
+
+		/* Filter out the "definitely not in set" queries */
+		if (((bloom_word >> h1) & (bloom_word >> h2) & 1) == 0)
+			return NULL;
+
+		/* Locate hash chain and corresponding value element*/
+		bucket = image->buckets_gnu[hash_gnu % image->nbuckets_gnu];
+
+		if (bucket == 0)
+			return NULL;
+
+		hashval = &image->chain_zero_gnu[bucket];
+
+		do {
+			if (((*hashval ^ hash_gnu) >> 1) == 0) {
+				symnum = hashval - image->chain_zero_gnu;
+				sym = image->Symbol(symnum);
+
+				if(matches_symbol(image,
+						lookupInfo,
+						allowLocal,
+						sym,
+						versionedSymbol,
+						versionedSymbolCount,
+						symnum))
+				{
+					return sym;
+				}
+			}
+		} while ((*hashval++ & 1) == 0);
+	}
+
+	if(versionedSymbolCount == 1) {
+		return versionedSymbol;
+	}
+
+	return NULL;
 }
 
 
@@ -229,7 +349,7 @@ find_symbol(image_t* image, const SymbolLookupInfo& lookupInfo,
 	void **_location)
 {
 	// get the symbol in the image
-	elf_sym* symbol = find_symbol(image, lookupInfo);
+	const Elf_Sym* symbol = find_symbol(image, lookupInfo);
 	if (symbol == NULL)
 		return B_ENTRY_NOT_FOUND;
 
@@ -254,16 +374,16 @@ find_symbol_breadth_first(image_t* image, const SymbolLookupInfo& lookupInfo,
 	queue[count++] = image;
 	image->flags |= RFLAG_VISITED;
 
-	elf_sym* candidateSymbol = NULL;
+	const Elf_Sym* candidateSymbol = NULL;
 	image_t* candidateImage = NULL;
 
 	while (index < count) {
 		// pop next image
 		image = queue[index++];
 
-		elf_sym* symbol = find_symbol(image, lookupInfo);
+		const Elf_Sym* symbol = find_symbol(image, lookupInfo);
 		if (symbol != NULL) {
-			bool isWeak = symbol->Bind() == STB_WEAK;
+			bool isWeak = ELF_ST_BIND(symbol->st_info) == STB_WEAK;
 			if (candidateImage == NULL || !isWeak) {
 				candidateSymbol = symbol;
 				candidateImage = image;
@@ -304,8 +424,8 @@ find_symbol_breadth_first(image_t* image, const SymbolLookupInfo& lookupInfo,
 }
 
 
-elf_sym*
-find_undefined_symbol_beos(image_t* rootImage, image_t* image,
+const Elf_Sym*
+find_undefined_symbol_beos(image_t*, image_t* image,
 	const SymbolLookupInfo& lookupInfo, image_t** foundInImage)
 {
 	// BeOS style symbol resolution: It is sufficient to check the image itself
@@ -313,17 +433,18 @@ find_undefined_symbol_beos(image_t* rootImage, image_t* image,
 	// symbol wasn't there. First we check whether the requesting symbol is
 	// defined already -- then we can simply return it, since, due to symbolic
 	// linking, that's the one we'd find anyway.
-	if (elf_sym* symbol = lookupInfo.requestingSymbol) {
+	if (const Elf_Sym* symbol = lookupInfo.requestingSymbol) {
 		if (symbol->st_shndx != SHN_UNDEF
-			&& ((symbol->Bind() == STB_GLOBAL)
-				|| (symbol->Bind() == STB_WEAK))) {
+			&& ((ELF_ST_BIND(symbol->st_info) == STB_GLOBAL)
+				|| (ELF_ST_BIND(symbol->st_info) == STB_WEAK)
+				|| (ELF_ST_BIND(symbol->st_info) == STB_GNU_UNIQUE))) {
 			*foundInImage = image;
 			return symbol;
 		}
 	}
 
 	// lookup in image
-	elf_sym* symbol = find_symbol(image, lookupInfo);
+	const Elf_Sym* symbol = find_symbol(image, lookupInfo);
 	if (symbol != NULL) {
 		*foundInImage = image;
 		return symbol;
@@ -344,7 +465,7 @@ find_undefined_symbol_beos(image_t* rootImage, image_t* image,
 }
 
 
-elf_sym*
+const Elf_Sym*
 find_undefined_symbol_global(image_t* rootImage, image_t* image,
 	const SymbolLookupInfo& lookupInfo, image_t** _foundInImage)
 {
@@ -352,7 +473,7 @@ find_undefined_symbol_global(image_t* rootImage, image_t* image,
 	// the symbol in the order they have been loaded. We skip add-on images and
 	// RTLD_LOCAL images though.
 	image_t* candidateImage = NULL;
-	elf_sym* candidateSymbol = NULL;
+	const Elf_Sym* candidateSymbol = NULL;
 
 	// If the requesting image is linked symbolically, look up the symbol there
 	// first.
@@ -360,7 +481,7 @@ find_undefined_symbol_global(image_t* rootImage, image_t* image,
 	if (symbolic) {
 		candidateSymbol = find_symbol(image, lookupInfo);
 		if (candidateSymbol != NULL) {
-			if (candidateSymbol->Bind() != STB_WEAK) {
+			if (ELF_ST_BIND(candidateSymbol->st_info) != STB_WEAK) {
 				*_foundInImage = image;
 				return candidateSymbol;
 			}
@@ -376,8 +497,8 @@ find_undefined_symbol_global(image_t* rootImage, image_t* image,
 				: (otherImage->type != B_ADD_ON_IMAGE
 					&& (otherImage->flags
 						& (RTLD_GLOBAL | RFLAG_USE_FOR_RESOLVING)) != 0)) {
-			if (elf_sym* symbol = find_symbol(otherImage, lookupInfo)) {
-				if (symbol->Bind() != STB_WEAK) {
+			if (const Elf_Sym* symbol = find_symbol(otherImage, lookupInfo)) {
+				if (ELF_ST_BIND(symbol->st_info) != STB_WEAK) {
 					*_foundInImage = otherImage;
 					return symbol;
 				}
@@ -398,7 +519,7 @@ find_undefined_symbol_global(image_t* rootImage, image_t* image,
 }
 
 
-elf_sym*
+const Elf_Sym*
 find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 	const SymbolLookupInfo& lookupInfo, image_t** _foundInImage)
 {
@@ -420,9 +541,9 @@ find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 	// weak symbols that must be resolved globally from those that should be
 	// resolved within the add-on.
 	if (rootImage == image) {
-		if (elf_sym* symbol = lookupInfo.requestingSymbol) {
+		if (const Elf_Sym* symbol = lookupInfo.requestingSymbol) {
 			if (symbol->st_shndx != SHN_UNDEF
-				&& (symbol->Bind() == STB_GLOBAL)) {
+				&& (ELF_ST_BIND(symbol->st_info) == STB_GLOBAL || ELF_ST_BIND(symbol->st_info) == STB_GNU_UNIQUE)) {
 				*_foundInImage = image;
 				return symbol;
 			}
@@ -430,7 +551,7 @@ find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 	}
 
 	image_t* candidateImage = NULL;
-	elf_sym* candidateSymbol = NULL;
+	const Elf_Sym* candidateSymbol = NULL;
 
 	// If the requesting image is linked symbolically, look up the symbol there
 	// first.
@@ -438,7 +559,7 @@ find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 	if (symbolic) {
 		candidateSymbol = find_symbol(image, lookupInfo);
 		if (candidateSymbol != NULL) {
-			if (candidateSymbol->Bind() != STB_WEAK) {
+			if (ELF_ST_BIND(candidateSymbol->st_info) != STB_WEAK) {
 				*_foundInImage = image;
 				return candidateSymbol;
 			}
@@ -453,8 +574,8 @@ find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 			&& otherImage->type != B_ADD_ON_IMAGE
 			&& (otherImage->flags
 				& (RTLD_GLOBAL | RFLAG_USE_FOR_RESOLVING)) != 0) {
-			if (elf_sym* symbol = find_symbol(otherImage, lookupInfo)) {
-				if (symbol->Bind() != STB_WEAK) {
+			if (const Elf_Sym* symbol = find_symbol(otherImage, lookupInfo)) {
+				if (ELF_ST_BIND(symbol->st_info) != STB_WEAK) {
 					*_foundInImage = otherImage;
 					return symbol;
 				}
@@ -483,7 +604,7 @@ find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 
 
 int
-resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
+resolve_symbol(image_t* rootImage, image_t* image, const Elf_Sym* sym,
 	SymbolLookupCache* cache, addr_t* symAddress, image_t** symbolImage)
 {
 	uint32 index = sym - image->syms;
@@ -494,18 +615,18 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 		return B_OK;
 	}
 
-	elf_sym* sharedSym;
+	const Elf_Sym* sharedSym;
 	image_t* sharedImage;
-	const char* symName = SYMNAME(image, sym);
+	const char* symName = image->SymbolName(sym);
 
 	// get the symbol type
 	int32 type = B_SYMBOL_TYPE_ANY;
-	if (sym->Type() == STT_FUNC)
+	if (ELF_ST_TYPE(sym->st_info) == STT_FUNC)
 		type = B_SYMBOL_TYPE_TEXT;
-	else if (sym->Type() == STT_OBJECT)
+	else if (ELF_ST_TYPE(sym->st_info) == STT_OBJECT)
 		type = B_SYMBOL_TYPE_DATA;
 
-	if (sym->Bind() == STB_LOCAL) {
+	if (ELF_ST_BIND(sym->st_info) == STB_LOCAL) {
 		// Local symbols references are always resolved to the given symbol.
 		sharedImage = image;
 		sharedSym = sym;
@@ -514,7 +635,7 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 		const elf_version_info* versionInfo = NULL;
 		if (image->symbol_versions != NULL) {
 			uint32 versionIndex = VER_NDX(image->symbol_versions[index]);
-			if (versionIndex >= VER_NDX_INITIAL)
+			if (versionIndex >= VER_NDX_GIVEN)
 				versionInfo = image->versions + versionIndex;
 		}
 
@@ -532,19 +653,20 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 	};
 	uint32 lookupError = ERROR_UNPATCHED;
 
-	bool tlsSymbol = sym->Type() == STT_TLS;
+	bool tlsSymbol = ELF_ST_TYPE(sym->st_info) == STT_TLS;
 	void* location = NULL;
 	if (sharedSym == NULL) {
 		// symbol not found at all
 		lookupError = ERROR_NO_SYMBOL;
 		sharedImage = NULL;
-	} else if (sym->Type() != STT_NOTYPE
-		&& sym->Type() != sharedSym->Type()) {
+	} else if (ELF_ST_TYPE(sym->st_info) != STT_NOTYPE
+		&& ELF_ST_TYPE(sym->st_info) != ELF_ST_TYPE(sharedSym->st_info)) {
 		// symbol not of the requested type
 		lookupError = ERROR_WRONG_TYPE;
 		sharedImage = NULL;
-	} else if (sharedSym->Bind() != STB_GLOBAL
-		&& sharedSym->Bind() != STB_WEAK) {
+	} else if (ELF_ST_BIND(sharedSym->st_info) != STB_GLOBAL
+		&& ELF_ST_BIND(sharedSym->st_info) != STB_WEAK
+		&& ELF_ST_BIND(sharedSym->st_info) != STB_GNU_UNIQUE) {
 		// symbol not exported
 		lookupError = ERROR_NOT_EXPORTED;
 		sharedImage = NULL;
@@ -561,6 +683,15 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 	if (!tlsSymbol) {
 		patch_undefined_symbol(rootImage, image, symName, &sharedImage,
 			&location, &type);
+	}
+
+	if (location == NULL && lookupError != SUCCESS) {
+		if(ELF_ST_BIND(sym->st_info) == STB_WEAK) {
+			if (symbolImage)
+				*symbolImage = rootImage;
+			*symAddress = 0;
+			return B_OK;
+		}
 	}
 
 	if (location == NULL && lookupError != SUCCESS) {
