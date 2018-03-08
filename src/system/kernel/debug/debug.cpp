@@ -96,6 +96,7 @@ static bool sBlueScreenOutput = true;
 static bool sEmergencyKeysEnabled = true;
 static spinlock sSpinlock = B_SPINLOCK_INITIALIZER;
 static int32 sDebuggerOnCPU = -1;
+static ConditionVariable sRepeatCheckCond;
 
 static sem_id sSyslogNotify = -1;
 static thread_id sSyslogWriter = -1;
@@ -1513,6 +1514,11 @@ debug_output(const char* string, int32 length, bool notifySyslog)
 		sMessageRepeatLastTime = system_time();
 		if (sMessageRepeatFirstTime == 0)
 			sMessageRepeatFirstTime = sMessageRepeatLastTime;
+
+		// Signal the daemon on first repeat. It will snooze on timer then
+		if(sMessageRepeatCount == 1 && !debug_debugger_running()) {
+			sRepeatCheckCond.NotifyOne();
+		}
 	} else {
 		flush_pending_repeats(notifySyslog);
 
@@ -1584,21 +1590,38 @@ flush_pending_repeats(bool notifySyslog)
 	sMessageRepeatCount = 0;
 }
 
-
-static void
-check_pending_repeats(void* /*data*/, int /*iteration*/)
+static status_t pending_repeats_checker(void*)
 {
-	if (sMessageRepeatCount > 0
-		&& (system_time() - sMessageRepeatLastTime > 1000000
-			|| system_time() - sMessageRepeatFirstTime > 3000000)) {
-		cpu_status state = disable_interrupts();
-		acquire_spinlock(&sSpinlock);
+	for(;;) {
+		InterruptsSpinLocker locker(sSpinlock);
+
+		if(sMessageRepeatCount == 0) {
+			ConditionVariableEntry entry;
+			sRepeatCheckCond.Add(&entry);
+			locker.Unlock();
+			entry.Wait();
+			continue;
+		}
+
+		bigtime_t currentTime = system_time();
+
+		// Less than 3s since first repeat
+		if((currentTime - sMessageRepeatFirstTime) < 3000000) {
+			locker.Unlock();
+			if((currentTime - sMessageRepeatLastTime) < 1000000) {
+				// Flush after last repeat time is at least 1s
+				snooze(1000000 - (currentTime - sMessageRepeatLastTime));
+			} else {
+				// Flush after first repeat time is at least 3s
+				snooze(3000000 - (currentTime - sMessageRepeatFirstTime));
+			}
+			locker.Lock();
+		}
 
 		flush_pending_repeats(true);
-
-		release_spinlock(&sSpinlock);
-		restore_interrupts(state);
 	}
+
+	return B_OK;
 }
 
 
@@ -1668,6 +1691,8 @@ debug_early_boot_message(const char* string)
 void
 debug_init(kernel_args* args)
 {
+	sRepeatCheckCond.Init(nullptr, "debug_repeat_checker");
+
 	new(&gDefaultDebugOutputFilter) DefaultDebugOutputFilter;
 
 	syslog_init(args);
@@ -1737,7 +1762,10 @@ debug_init_post_modules(struct kernel_args* args)
 	syslog_init_post_modules();
 
 	// check for dupped lines every 10/10 second
-	register_kernel_daemon(check_pending_repeats, NULL, 10);
+	thread_id thread = spawn_kernel_thread(pending_repeats_checker, "pending_repeat_checker", B_LOW_PRIORITY, nullptr);
+	ASSERT_ALWAYS(thread >= 0);
+
+	resume_thread(thread);
 
 	syslog_init_post_threads();
 
