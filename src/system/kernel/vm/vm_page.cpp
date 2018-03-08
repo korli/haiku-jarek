@@ -123,6 +123,8 @@ static int32 sUnreservedFreePages;
 static int32 sUnsatisfiedPageReservations;
 static int32 sModifiedTemporaryPages;
 
+static ConditionVariable sPageScrubberCond;
+
 static ConditionVariable sFreePageCondition;
 static mutex sPageDeficitLock = MUTEX_INITIALIZER("page deficit");
 
@@ -1464,6 +1466,8 @@ unreserve_pages(uint32 count)
 static void
 free_page(vm_page* page, bool clear)
 {
+	bool notifyFreePageCondition = false;
+
 	DEBUG_PAGE_ACCESS_CHECK(page);
 
 	PAGE_ASSERT(page, !page->IsMapped());
@@ -1520,10 +1524,22 @@ free_page(vm_page* page, bool clear)
 		sClearPageQueue.PrependUnlocked(page);
 	} else {
 		page->SetState(PAGE_STATE_FREE);
-		sFreePageQueue.PrependUnlocked(page);
+		InterruptsSpinLocker queueLocker(sFreePageQueue.GetLock());
+		sFreePageQueue.Prepend(page);
+		if(sFreePageQueue.Count() == SCRUB_SIZE &&
+			atomic_get(&sUnreservedFreePages) >= (int32)sFreePagesTarget)
+		{
+			// Notify condition only when we cross the threshold
+			locker.Unlock();
+			notifyFreePageCondition = true;
+		}
 	}
 
 	locker.Unlock();
+
+	if(notifyFreePageCondition) {
+		sFreePageCondition.NotifyOne();
+	}
 }
 
 
@@ -1739,12 +1755,18 @@ page_scrubber(void *unused)
 	TRACE(("page_scrubber starting...\n"));
 
 	for (;;) {
-		snooze(100000); // 100ms
+		{
+			InterruptsSpinLocker lockerForFreeQueue(sFreePageQueue.GetLock());
 
-		if (sFreePageQueue.Count() == 0
-				|| atomic_get(&sUnreservedFreePages)
-					< (int32)sFreePagesTarget) {
-			continue;
+			if (sFreePageQueue.Count() < SCRUB_SIZE
+					|| atomic_get(&sUnreservedFreePages) < (int32)sFreePagesTarget)
+			{
+				ConditionVariableEntry entry;
+				sPageScrubberCond.Add(&entry);
+				lockerForFreeQueue.Unlock();
+				entry.Wait();
+				continue;
+			}
 		}
 
 		// Since we temporarily remove pages from the free pages reserve,
@@ -1754,8 +1776,12 @@ page_scrubber(void *unused)
 		// reserved pages have already been allocated.
 		int32 reserved = reserve_some_pages(SCRUB_SIZE,
 			kPageReserveForPriority[VM_PRIORITY_USER]);
-		if (reserved == 0)
+
+		if (reserved == 0) {
+			// Defer anyway
+			snooze(100000);
 			continue;
+		}
 
 		// get some pages from the free queue
 		ReadLocker locker(sFreePageQueuesLock);
@@ -1778,6 +1804,8 @@ page_scrubber(void *unused)
 
 		if (scrubCount == 0) {
 			unreserve_pages(reserved);
+			// Defer anyway
+			snooze(100000);
 			continue;
 		}
 
@@ -1800,6 +1828,9 @@ page_scrubber(void *unused)
 		locker.Unlock();
 
 		unreserve_pages(reserved);
+
+		// Wait before next scrub
+		snooze(100000);
 
 		TA(ScrubbedPages(scrubCount));
 	}
@@ -3400,7 +3431,10 @@ vm_page_init_post_area(kernel_args *args)
 status_t
 vm_page_init_post_thread(kernel_args *args)
 {
-	new (&sFreePageCondition) ConditionVariable;
+	new (&sPageScrubberCond) ConditionVariable();
+	sPageScrubberCond.Init(&sFreePageQueue, "page_scrubber");
+
+	new (&sFreePageCondition) ConditionVariable();
 	sFreePageCondition.Publish(&sFreePageQueue, "free page");
 
 	// create a kernel thread to clear out pages
