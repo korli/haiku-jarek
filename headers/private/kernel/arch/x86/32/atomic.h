@@ -9,21 +9,21 @@
 static inline void
 memory_read_barrier_inline(void)
 {
-	asm volatile("lock; addl $0, (%%esp)" : : : "memory");
+	__asm__ __volatile__("lock; addl $0, (%%esp)" : : : "memory");
 }
 
 
 static inline void
 memory_write_barrier_inline(void)
 {
-	asm volatile("lock; addl $0, (%%esp)" : : : "memory");
+	__asm__ __volatile__("lock; addl $0, (%%esp)" : : : "memory");
 }
 
 
 static inline void
 memory_full_barrier_inline(void)
 {
-	asm volatile("lock; addl $0, (%%esp)" : : : "memory");
+	__asm__ __volatile__("lock; addl $0, (%%esp)" : : : "memory");
 }
 
 
@@ -46,7 +46,7 @@ atomic_set_inline(int32* value, int32 newValue)
 static inline int32
 atomic_get_and_set_inline(int32* value, int32 newValue)
 {
-	asm volatile("xchgl %0, (%1)"
+	__asm__ __volatile__("xchgl %0, (%1)"
 		: "+r" (newValue)
 		: "r" (value)
 		: "memory");
@@ -57,7 +57,7 @@ atomic_get_and_set_inline(int32* value, int32 newValue)
 static inline int32
 atomic_test_and_set_inline(int32* value, int32 newValue, int32 testAgainst)
 {
-	asm volatile("lock; cmpxchgl %2, (%3)"
+	__asm__ __volatile__("lock; cmpxchgl %2, (%3)"
 		: "=a" (newValue)
 		: "0" (testAgainst), "r" (newValue), "r" (value)
 		: "memory");
@@ -68,7 +68,7 @@ atomic_test_and_set_inline(int32* value, int32 newValue, int32 testAgainst)
 static inline int32
 atomic_add_inline(int32* value, int32 newValue)
 {
-	asm volatile("lock; xaddl %0, (%1)"
+	__asm__ __volatile__("lock; xaddl %0, (%1)"
 		: "+r" (newValue)
 		: "r" (value)
 		: "memory");
