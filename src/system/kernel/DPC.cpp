@@ -54,7 +54,8 @@ FunctionDPCCallback::DoDPC(DPCQueue* queue)
 
 DPCCallback::DPCCallback()
 	:
-	fInQueue(NULL)
+	fInQueue(NULL),
+	fExpireAt(0)
 {
 }
 
@@ -160,28 +161,18 @@ DPCQueue::Close(bool cancelPending)
 status_t
 DPCQueue::Add(DPCCallback* callback)
 {
-	// queue the callback, if the queue isn't closed already
-	InterruptsSpinLocker locker(fLock);
-
-	if (_IsClosed())
-		return B_NOT_INITIALIZED;
-
-	bool wasEmpty = fCallbacks.IsEmpty();
-	fCallbacks.Add(callback);
-	callback->fInQueue = this;
-
-	locker.Unlock();
-
-	// notify the condition variable, if necessary
-	if (wasEmpty)
-		fPendingCallbacksCondition.NotifyAll();
-
-	return B_OK;
+	return AddAfter(callback, 0);
 }
 
 
 status_t
 DPCQueue::Add(void (*function)(void*), void* argument)
+{
+	return AddAfter(function, argument, 0);
+}
+
+status_t
+DPCQueue::AddAfter(void (*function)(void*), void* argument, bigtime_t after)
 {
 	if (function == NULL)
 		return B_BAD_VALUE;
@@ -201,13 +192,74 @@ DPCQueue::Add(void (*function)(void*), void* argument)
 	functionCallback->SetTo(function, argument);
 
 	// add it
-	status_t error = Add(functionCallback);
+	status_t error = AddAfter(functionCallback, after);
+
 	if (error != B_OK)
 		Recycle(functionCallback);
 
 	return error;
 }
 
+void DPCQueue::_Enqueue(DPCCallback * callback)
+{
+	if(fCallbacks.IsEmpty()) {
+		fCallbacks.Add(callback);
+	} else if(callback->fExpireAt >= fCallbacks.Last()->fExpireAt) {
+		fCallbacks.Add(callback);
+	} else {
+		DPCCallback * next = nullptr;
+		for(next = fCallbacks.First() ; next ; next = fCallbacks.GetNext(next)) {
+			if(next->fExpireAt > callback->fExpireAt) {
+				break;
+			}
+		}
+
+		if(next == nullptr) {
+			fCallbacks.Add(callback, true);
+		} else {
+			fCallbacks.InsertBefore(next, callback);
+		}
+	}
+
+	callback->fInQueue = this;
+
+}
+status_t
+DPCQueue::AddAfter(DPCCallback * callback, bigtime_t after)
+{
+	// queue the callback, if the queue isn't closed already
+	InterruptsSpinLocker locker(fLock);
+
+	if (_IsClosed())
+		return B_NOT_INITIALIZED;
+
+	if(callback->fInQueue == this) {
+		// We may need to cancel
+		fCallbacks.Remove(callback);
+		callback->fInQueue = nullptr;
+	} else if(fCallbackInProgress == callback) {
+		fReQueuedCallbackInProgress = true;
+		callback->fExpireAt = after;
+		return B_OK;
+	}
+
+	bool wasEmpty = fCallbacks.IsEmpty();
+
+	callback->fExpireAt = system_time() + after;
+
+	_Enqueue(callback);
+
+	bool isFirst = fCallbacks.First() == callback;
+
+	locker.Unlock();
+
+	// notify the condition variable, if necessary
+	if (wasEmpty || isFirst) {
+		fPendingCallbacksCondition.NotifyAll();
+	}
+
+	return B_OK;
+}
 
 bool
 DPCQueue::Cancel(DPCCallback* callback)
@@ -245,6 +297,25 @@ DPCQueue::Cancel(DPCCallback* callback)
 	return false;
 }
 
+bool DPCQueue::LazyCancel(DPCCallback* callback)
+{
+	InterruptsSpinLocker locker(fLock);
+
+	// If the callback is queued, remove it.
+	if (callback->fInQueue == this) {
+		fCallbacks.Remove(callback);
+		callback->fInQueue = nullptr;
+		return true;
+	}
+
+	// The callback is not queued. If it isn't in progress, we're done, too.
+	if (callback != fCallbackInProgress) {
+		return false;
+	}
+
+	fReQueuedCallbackInProgress = false;
+	return false;
+}
 
 void
 DPCQueue::Recycle(FunctionDPCCallback* callback)
@@ -267,8 +338,11 @@ DPCQueue::_Thread()
 	while (true) {
 		InterruptsSpinLocker locker(fLock);
 
+		bigtime_t now = system_time();
+
 		// get the next pending callback
-		DPCCallback* callback = fCallbacks.RemoveHead();
+		DPCCallback* callback = fCallbacks.First();
+
 		if (callback == NULL) {
 			// nothing is pending -- wait unless the queue is already closed
 			if (_IsClosed())
@@ -283,6 +357,18 @@ DPCQueue::_Thread()
 			continue;
 		}
 
+		if(callback->fExpireAt > now) {
+			bigtime_t delta = callback->fExpireAt - now;
+			ConditionVariableEntry waitEntry;
+			fPendingCallbacksCondition.Add(&waitEntry);
+
+			locker.Unlock();
+			waitEntry.Wait(B_RELATIVE_TIMEOUT, delta);
+			continue;
+		}
+
+		fCallbacks.RemoveHead();
+
 		callback->fInQueue = NULL;
 		fCallbackInProgress = callback;
 
@@ -293,12 +379,18 @@ DPCQueue::_Thread()
 
 		fCallbackInProgress = NULL;
 
-		// wake up threads waiting for the callback to be done
-		ConditionVariable* doneCondition = fCallbackDoneCondition;
-		fCallbackDoneCondition = NULL;
-		locker.Unlock();
-		if (doneCondition != NULL)
-			doneCondition->NotifyAll();
+		if(fReQueuedCallbackInProgress) {
+			// We need to requeue the callback
+			fReQueuedCallbackInProgress = false;
+			_Enqueue(callback);
+		} else {
+			// wake up threads waiting for the callback to be done
+			ConditionVariable* doneCondition = fCallbackDoneCondition;
+			fCallbackDoneCondition = NULL;
+			locker.Unlock();
+			if (doneCondition != NULL)
+				doneCondition->NotifyAll();
+		}
 	}
 
 	return B_OK;

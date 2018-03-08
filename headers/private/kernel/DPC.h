@@ -33,6 +33,7 @@ private:
 
 private:
 			DPCQueue*			fInQueue;
+			bigtime_t			fExpireAt;
 };
 
 
@@ -64,7 +65,11 @@ public:
 
 			status_t			Add(DPCCallback* callback);
 			status_t			Add(void (*function)(void*), void* argument);
+			status_t			AddAfter(DPCCallback * callback, bigtime_t after);
+			status_t			AddAfter(void (*function)(void*), void* argument, bigtime_t after);
+
 			bool				Cancel(DPCCallback* callback);
+			bool				LazyCancel(DPCCallback* callback);
 
 			thread_id			Thread() const
 									{ return fThreadID; }
@@ -83,6 +88,8 @@ private:
 			bool				_IsClosed() const
 									{ return fThreadID < 0; }
 
+			void				_Enqueue(DPCCallback * callback);
+
 private:
 			spinlock			fLock;
 			thread_id			fThreadID;
@@ -90,6 +97,7 @@ private:
 			CallbackList		fUnusedFunctionCallbacks;
 			ConditionVariable	fPendingCallbacksCondition;
 			DPCCallback*		fCallbackInProgress;
+			bool			fReQueuedCallbackInProgress = false;
 			ConditionVariable*	fCallbackDoneCondition;
 };
 
