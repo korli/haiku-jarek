@@ -12,8 +12,8 @@
 
 #include <new>
 
-#include <runtime_loader.h>
-#include <syscalls.h>
+#include <runtime_loader/runtime_loader.h>
+#include <system/syscalls.h>
 
 #include "Image.h"
 
@@ -198,7 +198,7 @@ public:
 									const image_t* image, int32 symbolCount);
 	virtual						~LoadedImage();
 
-	virtual	const elf_sym*		LookupSymbol(addr_t address,
+	virtual	const Elf_Sym*		LookupSymbol(addr_t address,
 									addr_t* _baseAddress,
 									const char** _symbolName,
 									size_t *_symbolNameLen,
@@ -321,7 +321,7 @@ SymbolLookup::LookupSymbolAddress(addr_t address, addr_t *_baseAddress,
 	if (_imageName != NULL)
 		*_imageName = image->Name();
 
-	const elf_sym* symbolFound = image->LookupSymbol(address, _baseAddress,
+	const Elf_Sym* symbolFound = image->LookupSymbol(address, _baseAddress,
 		_symbolName, _symbolNameLen, _exactMatch);
 
 	TRACE(("SymbolLookup::LookupSymbolAddress(): done: symbol: %p, image name: "
@@ -547,7 +547,7 @@ SymbolLookup::_LoadImageInfo(const image_info& imageInfo)
 			return B_OK;
 
 		image = new(std::nothrow) LoadedImage(this, loadedImage,
-			Read(loadedImage->symhash[1]));
+			loadedImage->dynsymcount);
 		if (image == NULL)
 			return B_NO_MEMORY;
 
@@ -591,7 +591,7 @@ SymbolLookup::LoadedImage::~LoadedImage()
 }
 
 
-const elf_sym*
+const Elf_Sym*
 SymbolLookup::LoadedImage::LookupSymbol(addr_t address, addr_t* _baseAddress,
 	const char** _symbolName, size_t *_symbolNameLen, bool *_exactMatch) const
 {
@@ -600,16 +600,16 @@ SymbolLookup::LoadedImage::LookupSymbol(addr_t address, addr_t* _baseAddress,
 		(void*)fImage->regions[0].vmstart, fImage->regions[0].size));
 
 	// search the image for the symbol
-	const elf_sym *symbolFound = NULL;
+	const Elf_Sym *symbolFound = NULL;
 	addr_t deltaFound = INT_MAX;
 	bool exactMatch = false;
 	const char *symbolName = NULL;
 
-	int32 symbolCount = fSymbolLookup->Read(fImage->symhash[1]);
+	int32 symbolCount = fImage->dynsymcount;
 	const elf_region_t *textRegion = fImage->regions;				// local
 
 	for (int32 i = 0; i < symbolCount; i++) {
-		const elf_sym *symbol = &fSymbolLookup->Read(fImage->syms[i]);
+		const Elf_Sym *symbol = &fSymbolLookup->Read(fImage->syms[i]);
 
 		// The symbol table contains not only symbols referring to functions
 		// and data symbols within the shared object, but also referenced
@@ -618,7 +618,7 @@ SymbolLookup::LoadedImage::LookupSymbol(addr_t address, addr_t* _baseAddress,
 		// that have an st_value != 0 (0 seems to be an indication for a
 		// symbol defined elsewhere -- couldn't verify that in the specs
 		// though).
-		if ((symbol->Type() != STT_FUNC && symbol->Type() != STT_OBJECT)
+		if ((ELF_ST_TYPE(symbol->st_info) != STT_FUNC && ELF_ST_TYPE(symbol->st_info) != STT_OBJECT)
 			|| symbol->st_value == 0
 			|| symbol->st_value + symbol->st_size + textRegion->delta
 				> textRegion->vmstart + textRegion->size) {
@@ -634,7 +634,7 @@ SymbolLookup::LoadedImage::LookupSymbol(addr_t address, addr_t* _baseAddress,
 
 		if (!symbolFound || symbolDelta < deltaFound) {
 			symbolName = (const char*)fSymbolLookup->PrepareAddressNoThrow(
-				SYMNAME(fImage, symbol), 1);
+				fImage->SymbolName(symbol), 1);
 			if (symbolName == NULL)
 				continue;
 
@@ -676,19 +676,19 @@ SymbolLookup::LoadedImage::NextSymbol(int32& iterator, const char** _symbolName,
 		if (++iterator >= fSymbolCount)
 			return B_ENTRY_NOT_FOUND;
 
-		const elf_sym* symbol
+		const Elf_Sym* symbol
 			= &fSymbolLookup->Read(fImage->syms[iterator]);
-		if ((symbol->Type() != STT_FUNC && symbol->Type() != STT_OBJECT)
+		if ((ELF_ST_TYPE(symbol->st_info) != STT_FUNC && ELF_ST_TYPE(symbol->st_info) != STT_OBJECT)
 			|| symbol->st_value == 0) {
 			continue;
 		}
 
 		*_symbolName = (const char*)fSymbolLookup->PrepareAddressNoThrow(
-			SYMNAME(fImage, symbol), 1);
+			fImage->SymbolName(symbol), 1);
 		*_symbolNameLen = fSymbolLookup->_SymbolNameLen(*_symbolName);
 		*_symbolAddress = symbol->st_value + fTextDelta;
 		*_symbolSize = symbol->st_size;
-		*_symbolType = symbol->Type() == STT_FUNC ? B_SYMBOL_TYPE_TEXT
+		*_symbolType = ELF_ST_TYPE(symbol->st_info) == STT_FUNC ? B_SYMBOL_TYPE_TEXT
 			: B_SYMBOL_TYPE_DATA;
 
 		return B_OK;

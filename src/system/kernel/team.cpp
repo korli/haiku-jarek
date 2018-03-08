@@ -1604,7 +1604,7 @@ team_create_thread_start_internal(void* args)
 
 	// Register commpage image
 	image_id commPageImage = get_commpage_image();
-	extended_image_info imageInfo;
+	extended_image_info imageInfo = { };
 	err = get_image_info(commPageImage, &imageInfo.basic_info);
 	if (err != B_OK) {
 		TRACE(("team_create_thread_start: get_image_info() failed: %s\n",
@@ -1613,9 +1613,6 @@ team_create_thread_start_internal(void* args)
 	}
 	imageInfo.basic_info.text = team->commpage_address;
 	imageInfo.text_delta = (ssize_t)(addr_t)team->commpage_address;
-	imageInfo.symbol_table = NULL;
-	imageInfo.symbol_hash = NULL;
-	imageInfo.string_table = NULL;
 	image_id image = register_image(team, &imageInfo, sizeof(imageInfo));
 	if (image < 0) {
 		TRACE(("team_create_thread_start: register_image() failed: %s\n",

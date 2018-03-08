@@ -12,11 +12,12 @@
 #define _RUNTIME_LOADER_H
 
 
-#include <image.h>
-#include <OS.h>
+#include <kernel/image.h>
+#include <kernel/OS.h>
 
-#include <elf_private.h>
+#include <system/elf_private.h>
 
+#include <link.h>
 
 // #pragma mark - runtime loader libroot interface
 
@@ -39,7 +40,7 @@ struct rld_export {
 		void **_location);
 	status_t (*get_nearest_symbol_at_address)(void* address,
 		image_id* _imageID,	char** _imagePath, char** _imageName,
-		char** _symbolName, int32* _type, void** _location, bool* _exactMatch);
+		const char** _symbolName, int32* _type, void** _location, bool* _exactMatch);
 	status_t (*test_executable)(const char *path, char *interpreter);
 	status_t (*get_executable_architecture)(const char *path,
 		const char** _architecture);
@@ -53,6 +54,9 @@ struct rld_export {
 	void (*call_atexit_hooks_for_range)(addr_t start, addr_t size);
 
 	void (*call_termination_hooks)();
+
+	int (* iterate_phdr)(__dl_iterate_hdr_callback, void *);
+	int (* get_addr_phdr)(const void *, struct dl_phdr_info *);
 
 	const struct user_space_program_args *program_args;
 	const void* commpage_address;
@@ -106,14 +110,13 @@ typedef struct image_t {
 	addr_t 				dynamic_ptr; 	// pointer to the dynamic section
 
 	// pointer to symbol participation data structures
-	uint32				*symhash;
-	elf_sym				*syms;
-	char				*strtab;
-	elf_rel				*rel;
+	Elf_Sym				*syms;
+	const char			*strtab;
+	Elf_Rel				*rel;
 	int					rel_len;
-	elf_rela			*rela;
+	Elf_Rela			*rela;
 	int					rela_len;
-	elf_rel				*pltrel;
+	Elf_Rel				*pltrel;
 	int					pltrel_len;
 	addr_t				*init_array;
 	int					init_array_len;
@@ -122,6 +125,29 @@ typedef struct image_t {
 	addr_t				*term_array;
 	int					term_array_len;
 
+	Elf_Addr 			relro_page;
+	size_t				relro_size;
+
+    const Elf_Hashelt *buckets;		/* Hash table buckets array */
+    unsigned long nbuckets;			/* Number of buckets */
+    const Elf_Hashelt *chains;		/* Hash table chain array */
+    unsigned long nchains;			/* Number of entries in chain array */
+
+    Elf32_Word nbuckets_gnu;		/* Number of GNU hash buckets*/
+    Elf32_Word symndx_gnu;			/* 1st accessible symbol on dynsym table */
+    Elf32_Word maskwords_bm_gnu;  	/* Bloom filter words - 1 (bitmask) */
+    Elf32_Word shift2_gnu;			/* Bloom filter shift count */
+    Elf32_Word dynsymcount;			/* Total entries in dynsym table */
+    Elf_Addr *bloom_gnu;			/* Bloom filter used by GNU hash func */
+    const Elf_Hashelt *buckets_gnu;	/* GNU hash table bucket array */
+    const Elf_Hashelt *chain_zero_gnu;	/* GNU hash table value array (Zeroed) */
+
+    bool valid_hash_sysv;
+    bool valid_hash_gnu;
+
+	Elf32_Phdr 			*program_headers;
+	int					program_headers_count;
+
 	unsigned			dso_tls_id;
 
 	uint32				num_needed;
@@ -129,20 +155,20 @@ typedef struct image_t {
 
 	// versioning related structures
 	uint32				num_version_definitions;
-	elf_verdef			*version_definitions;
+	Elf_Verdef			*version_definitions;
 	uint32				num_needed_versions;
-	elf_verneed			*needed_versions;
+	Elf_Verneed			*needed_versions;
 	elf_versym			*symbol_versions;
 	elf_version_info	*versions;
 	uint32				num_versions;
 
 #ifdef __cplusplus
-	elf_sym*			(*find_undefined_symbol)(struct image_t* rootImage,
+	const Elf_Sym*			(*find_undefined_symbol)(struct image_t* rootImage,
 							struct image_t* image,
 							const SymbolLookupInfo& lookupInfo,
 							struct image_t** foundInImage);
 #else
-	elf_sym*			(*find_undefined_symbol)(struct image_t* rootImage,
+	const Elf_Sym*			(*find_undefined_symbol)(struct image_t* rootImage,
 							struct image_t* image,
 							const struct SymbolLookupInfo* lookupInfo,
 							struct image_t** foundInImage);
@@ -156,6 +182,20 @@ typedef struct image_t {
 	// describes the text and data regions
 	uint32				num_regions;
 	elf_region_t		regions[1];
+
+#ifdef __cplusplus
+	inline const char * String(size_t offset) const {
+		return strtab + offset;
+	}
+
+	inline const char * SymbolName(const Elf_Sym * sym) const {
+		return strtab + sym->st_name;
+	}
+
+	inline const Elf_Sym* Symbol(size_t index) const {
+		return &syms[index];
+	}
+#endif
 } image_t;
 
 typedef struct image_queue_t {
@@ -166,14 +206,6 @@ typedef struct image_queue_t {
 // image_t::flags
 #define	IMAGE_FLAG_RTLD_MASK			0x03
 			// RTLD_{LAZY,NOW} | RTLD_{LOCAL,GLOBAL}
-
-#define STRING(image, offset) ((char*)(&(image)->strtab[(offset)]))
-#define SYMNAME(image, sym) STRING(image, (sym)->st_name)
-#define SYMBOL(image, num) (&(image)->syms[num])
-#define HASHTABSIZE(image) ((image)->symhash[0])
-#define HASHBUCKETS(image) ((unsigned int*)&(image)->symhash[2])
-#define HASHCHAINS(image) ((unsigned int*)&(image)->symhash[2+HASHTABSIZE(image)])
-
 
 // The name of the area the runtime loader creates for debugging purposes.
 #define RUNTIME_LOADER_DEBUG_AREA_NAME	"_rld_debug_"

@@ -3696,7 +3696,7 @@ vm_free_unused_boot_loader_range(addr_t start, addr_t size)
 
 
 static void
-create_preloaded_image_areas(struct preloaded_image* _image)
+create_preloaded_image_areas(struct preloaded_image* _image, bool isKernel)
 {
 	preloaded_elf_image* image = static_cast<preloaded_elf_image*>(_image);
 	char name[B_OS_NAME_LENGTH];
@@ -3715,20 +3715,24 @@ create_preloaded_image_areas(struct preloaded_image* _image)
 	if (length > 25)
 		length = 25;
 
-	memcpy(name, fileName, length);
-	strcpy(name + length, "_text");
-	address = (void*)ROUNDDOWN(image->text_region.start, B_PAGE_SIZE);
-	image->text_region.id = create_area(name, &address, B_EXACT_ADDRESS,
-		PAGE_ALIGN(image->text_region.size), B_ALREADY_WIRED,
-		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
-		// this will later be remapped read-only/executable by the
-		// ELF initialization code
+	for(unsigned int i = 0 ; i < image->count_regions ; ++i) {
+		memcpy(name, fileName, length);
 
-	strcpy(name + length, "_data");
-	address = (void*)ROUNDDOWN(image->data_region.start, B_PAGE_SIZE);
-	image->data_region.id = create_area(name, &address, B_EXACT_ADDRESS,
-		PAGE_ALIGN(image->data_region.size), B_ALREADY_WIRED,
-		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+		if(image->regions[i].protection & (B_EXECUTE_AREA | B_KERNEL_EXECUTE_AREA)) {
+			strcpy(name + length, "_text");
+		} else if(image->regions[i].protection & (B_WRITE_AREA | B_KERNEL_WRITE_AREA)) {
+			strcpy(name + length, "_data");
+		} else {
+			strcpy(name + length, "_ro");
+		}
+
+		address = (void*)ROUNDDOWN(image->regions[i].start, B_PAGE_SIZE);
+
+		/* Module images are mapped as R/W by the bootloader */
+		image->regions[i].id = create_area(name, &address, B_EXACT_ADDRESS,
+			PAGE_ALIGN(image->regions[i].size), B_ALREADY_WIRED,
+			isKernel ? image->regions[i].protection : B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+	}
 }
 
 
@@ -4026,11 +4030,11 @@ vm_init(kernel_args* args)
 
 	allocate_kernel_args(args);
 
-	create_preloaded_image_areas(args->kernel_image);
+	create_preloaded_image_areas(args->kernel_image, true);
 
 	// allocate areas for preloaded images
 	for (image = args->preloaded_images; image != NULL; image = image->next)
-		create_preloaded_image_areas(image);
+		create_preloaded_image_areas(image, false);
 
 	// allocate kernel stacks
 	for (i = 0; i < args->num_cpus; i++) {

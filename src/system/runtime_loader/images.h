@@ -18,6 +18,7 @@ enum {
 
 	RFLAG_RW					= 0x0010,
 	RFLAG_ANON					= 0x0020,
+	RFLAG_EXECUTABLE			= 0x0040,
 
 	RFLAG_TERMINATED			= 0x0200,
 	RFLAG_INITIALIZED			= 0x0400,
@@ -28,7 +29,9 @@ enum {
 	RFLAG_REMAPPED				= 0x8000,
 
 	RFLAG_VISITED				= 0x10000,
-	RFLAG_USE_FOR_RESOLVING		= 0x20000
+	RFLAG_USE_FOR_RESOLVING		= 0x20000,
+	RFLAG_TEXTREL				= 0x40000,
+	RFLAG_CLEAR_TRAILER			= 0x80000,
 		// temporarily set in the symbol resolution code
 };
 
@@ -50,7 +53,7 @@ void		delete_image_struct(image_t* image);
 void		delete_image(image_t* image);
 void		put_image(image_t* image);
 
-status_t	map_image(int fd, char const* path, image_t* image, bool fixed);
+status_t	map_image(int fd, char const* path, image_t* image, Elf_Ehdr& ehdr, bool main_executable);
 void		unmap_image(image_t* image);
 void		remap_images();
 
@@ -72,6 +75,7 @@ void		set_image_flags_recursively(image_t* image, uint32 flags);
 void		clear_image_flags_recursively(image_t* image, uint32 flags);
 ssize_t		get_sorted_image_list(image_t* image, image_t*** _list,
 				uint32 sortFlag);
-
+bool 		elf_handle_textrel(image_t * image, bool before);
+bool 		elf_handle_relro(image_t * image);
 
 #endif	// IMAGES_H

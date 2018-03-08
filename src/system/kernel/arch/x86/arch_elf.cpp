@@ -29,10 +29,14 @@
 static bool
 is_in_image(struct elf_image_info *image, addr_t address)
 {
-	return (address >= image->text_region.start
-			&& address < image->text_region.start + image->text_region.size)
-		|| (address >= image->data_region.start
-			&& address < image->data_region.start + image->data_region.size);
+	for(unsigned int i = 0 ; i < image->num_regions ; ++i) {
+		if(address >= image->regions[i].start &&
+				address < (image->regions[i].start + image->regions[i].size))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 #endif	// !_BOOT_MODE
 
@@ -67,7 +71,11 @@ arch_elf_relocate_rel(struct elf_image_info *image,
 	struct elf_image_info *resolveImage, Elf32_Rel *rel, int relLength)
 #endif
 {
+#ifdef _BOOT_MODE
+	Elf32_Addr S;
+#else
 	addr_t S;
+#endif
 	addr_t A;
 	addr_t P;
 	addr_t finalAddress;
@@ -88,10 +96,10 @@ arch_elf_relocate_rel(struct elf_image_info *image,
 			case R_386_JMP_SLOT:
 			case R_386_GOTOFF:
 			{
-				Elf32_Sym *symbol;
+				const Elf32_Sym *symbol;
 				status_t status;
 
-				symbol = SYMBOL(image, ELF32_R_SYM(rel[i].r_info));
+				symbol = image->Symbol(ELF32_R_SYM(rel[i].r_info));
 
 #ifdef _BOOT_MODE
 				status = boot_elf_resolve_symbol(image, symbol, &S);
@@ -112,7 +120,7 @@ arch_elf_relocate_rel(struct elf_image_info *image,
 			case R_386_RELATIVE:
 			case R_386_GOTOFF:
 			case R_386_GOTPC:
-				A = *(addr_t *)(image->text_region.delta + rel[i].r_offset);
+				A = *(addr_t *)(image->regions[0].delta + rel[i].r_offset);
 				TRACE(("A %p\n", (void *)A));
 				break;
 		}
@@ -122,7 +130,7 @@ arch_elf_relocate_rel(struct elf_image_info *image,
 			case R_386_GOT32:
 			case R_386_PLT32:
 			case R_386_GOTPC:
-				P = image->text_region.delta + rel[i].r_offset;
+				P = image->regions[0].delta + rel[i].r_offset;
 				TRACE(("P %p\n", (void *)P));
 				break;
 		}
@@ -138,7 +146,7 @@ arch_elf_relocate_rel(struct elf_image_info *image,
 				break;
 			case R_386_RELATIVE:
 				// B + A;
-				finalAddress = image->text_region.delta + A;
+				finalAddress = image->regions[0].delta + A;
 				break;
 			case R_386_JMP_SLOT:
 			case R_386_GLOB_DAT:
@@ -151,7 +159,7 @@ arch_elf_relocate_rel(struct elf_image_info *image,
 				return B_BAD_DATA;
 		}
 
-		resolveAddress = (addr_t *)(image->text_region.delta + rel[i].r_offset);
+		resolveAddress = (addr_t *)(image->regions[0].delta + rel[i].r_offset);
 #ifndef _BOOT_MODE
 		if (!is_in_image(image, (addr_t)resolveAddress)) {
 			dprintf("arch_elf_relocate_rel: invalid offset %#lx\n",
@@ -161,7 +169,7 @@ arch_elf_relocate_rel(struct elf_image_info *image,
 #endif
 		*resolveAddress = finalAddress;
 		TRACE(("-> offset %#lx = %#lx\n",
-			(image->text_region.delta + rel[i].r_offset), finalAddress));
+			(image->regions[0].delta + rel[i].r_offset), finalAddress));
 	}
 
 	return B_NO_ERROR;
@@ -221,7 +229,7 @@ arch_elf_relocate_rela(struct elf_image_info *image,
 
 		// Resolve the symbol, if any.
 		if (symIndex != 0) {
-			Elf64_Sym* symbol = SYMBOL(image, symIndex);
+			const Elf64_Sym* symbol = image->Symbol(symIndex);
 
 			status_t status;
 #ifdef _BOOT_MODE
@@ -234,7 +242,7 @@ arch_elf_relocate_rela(struct elf_image_info *image,
 		}
 
 		// Address of the relocation.
-		Elf64_Addr relocAddr = image->text_region.delta + rel[i].r_offset;
+		Elf64_Addr relocAddr = image->regions[0].delta + rel[i].r_offset;
 
 		// Calculate the relocation value.
 		Elf64_Addr relocValue;
@@ -248,11 +256,11 @@ arch_elf_relocate_rela(struct elf_image_info *image,
 				relocValue = symAddr + rel[i].r_addend - rel[i].r_offset;
 				break;
 			case R_X86_64_GLOB_DAT:
-			case R_X86_64_JUMP_SLOT:
+			case R_X86_64_JMP_SLOT:
 				relocValue = symAddr + rel[i].r_addend;
 				break;
 			case R_X86_64_RELATIVE:
-				relocValue = image->text_region.delta + rel[i].r_addend;
+				relocValue = image->regions[0].delta + rel[i].r_addend;
 				break;
 			default:
 				dprintf("arch_elf_relocate_rela: unhandled relocation type %d\n",

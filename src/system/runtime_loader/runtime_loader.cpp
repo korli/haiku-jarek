@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/cdefs.h>
 
 #include <algorithm>
 
@@ -445,7 +446,7 @@ test_executable(const char *name, char *invoker)
 				status = B_UNKNOWN_EXECUTABLE;
 		}
 	} else if (status == B_OK) {
-		elf_ehdr *elfHeader = (elf_ehdr *)buffer;
+		Elf_Ehdr *elfHeader = (Elf_Ehdr *)buffer;
 		if (elfHeader->e_entry == 0) {
 			// we don't like to open shared libraries
 			status = B_NOT_AN_EXECUTABLE;
@@ -577,8 +578,8 @@ determine_x86_abi(int fd, const Elf32_Ehdr& elfHeader, bool& _isGcc2)
 		i = symbolHash[2 + symbolHashSize + i]) {
 		Elf32_Sym* symbol = symbolTable + i;
 		if (symbol->st_shndx != SHN_UNDEF
-			&& ((symbol->Bind() == STB_GLOBAL) || (symbol->Bind() == STB_WEAK))
-			&& symbol->Type() == STT_OBJECT
+			&& ((ELF_ST_BIND(symbol->st_info) == STB_GLOBAL) || (ELF_ST_BIND(symbol->st_info) == STB_WEAK))
+			&& ELF_ST_TYPE(symbol->st_info) == STT_OBJECT
 			&& (off_t)symbol->st_name + (off_t)nameLength < stringTableSize
 			&& strcmp(stringTable + symbol->st_name, name) == 0) {
 			if (symbol->st_value > 0 && symbol->st_size >= sizeof(uint32)

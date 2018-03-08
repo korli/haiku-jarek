@@ -17,23 +17,25 @@
 
 
 uint32 elf_hash(const char* name);
-
+uint32_t gnu_hash(const char *s);
 
 struct SymbolLookupInfo {
 	const char*				name;
 	int32					type;
 	uint32					hash;
+	uint32					hash_gnu;
 	uint32					flags;
 	const elf_version_info*	version;
-	elf_sym*				requestingSymbol;
+	const Elf_Sym*			requestingSymbol;
 
 	SymbolLookupInfo(const char* name, int32 type, uint32 hash,
 		const elf_version_info* version = NULL, uint32 flags = 0,
-		elf_sym* requestingSymbol = NULL)
+		const Elf_Sym* requestingSymbol = NULL)
 		:
 		name(name),
 		type(type),
 		hash(hash),
+		hash_gnu(gnu_hash(name)),
 		flags(flags),
 		version(version),
 		requestingSymbol(requestingSymbol)
@@ -42,11 +44,12 @@ struct SymbolLookupInfo {
 
 	SymbolLookupInfo(const char* name, int32 type,
 		const elf_version_info* version = NULL, uint32 flags = 0,
-		elf_sym* requestingSymbol = NULL)
+		const Elf_Sym* requestingSymbol = NULL)
 		:
 		name(name),
 		type(type),
 		hash(elf_hash(name)),
+		hash_gnu(gnu_hash(name)),
 		flags(flags),
 		version(version),
 		requestingSymbol(requestingSymbol)
@@ -58,7 +61,7 @@ struct SymbolLookupInfo {
 struct SymbolLookupCache {
 	SymbolLookupCache(image_t* image)
 		:
-		fTableSize(image->symhash != NULL ? image->symhash[1] : 0),
+		fTableSize(image->dynsymcount),
 		fValues(NULL),
 		fDSOs(NULL),
 		fValuesResolved(NULL)
@@ -128,18 +131,18 @@ void		patch_undefined_symbol(image_t* rootImage, image_t* image,
 				const char* name, image_t** foundInImage, void** symbol,
 				int32* type);
 
-elf_sym*	find_symbol(image_t* image, const SymbolLookupInfo& lookupInfo,
+const Elf_Sym*	find_symbol(image_t* image, const SymbolLookupInfo& lookupInfo,
 				bool allowLocal = false);
 status_t	find_symbol(image_t* image, const SymbolLookupInfo& lookupInfo,
 				void** _location);
 status_t	find_symbol_breadth_first(image_t* image,
 				const SymbolLookupInfo& lookupInfo, image_t** _foundInImage,
 				void** _location);
-elf_sym*	find_undefined_symbol_beos(image_t* rootImage, image_t* image,
+const Elf_Sym*	find_undefined_symbol_beos(image_t* rootImage, image_t* image,
 				const SymbolLookupInfo& lookupInfo, image_t** foundInImage);
-elf_sym*	find_undefined_symbol_global(image_t* rootImage, image_t* image,
+const Elf_Sym*	find_undefined_symbol_global(image_t* rootImage, image_t* image,
 				const SymbolLookupInfo& lookupInfo, image_t** foundInImage);
-elf_sym*	find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
+const Elf_Sym*	find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 				const SymbolLookupInfo& lookupInfo, image_t** foundInImage);
 
 

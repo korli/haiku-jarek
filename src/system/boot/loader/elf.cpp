@@ -7,13 +7,14 @@
 
 #include "elf.h"
 
-#include <boot/arch.h>
-#include <boot/platform.h>
-#include <boot/stage2.h>
-#include <driver_settings.h>
-#include <elf_private.h>
-#include <kernel.h>
-#include <SupportDefs.h>
+#include <kernel/boot/arch.h>
+#include <kernel/boot/platform.h>
+#include <kernel/boot/stage2.h>
+#include <drivers/driver_settings.h>
+#include <system/elf_private.h>
+#include <kernel/kernel.h>
+#include <system/vm_defs.h>
+#include <support/SupportDefs.h>
 
 #include <errno.h>
 #include <unistd.h>
@@ -52,7 +53,7 @@ public:
 	static	status_t	Create(int fd, preloaded_image** _image);
 	static	status_t	Load(int fd, preloaded_image* image);
 	static	status_t	Relocate(preloaded_image* image);
-	static	status_t	Resolve(ImageType* image, SymType* symbol,
+	static	status_t	Resolve(ImageType* image, const SymType* symbol,
 							AddrType* symbolAddress);
 
 private:
@@ -186,7 +187,7 @@ ELFLoader<Class>::Create(int fd, preloaded_image** _image)
 	if (memcmp(elfHeader.e_ident, ELFMAG, 4) != 0
 		|| elfHeader.e_ident[4] != Class::kIdentClass
 		|| elfHeader.e_phoff == 0
-		|| !elfHeader.IsHostEndian()
+		|| elfHeader.e_ident[EI_DATA] != ELF_TARG_DATA
 		|| elfHeader.e_phentsize != sizeof(PhdrType)) {
 		kernel_args_free(image);
 		return B_BAD_TYPE;
@@ -203,10 +204,11 @@ template<typename Class>
 /*static*/ status_t
 ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 {
-	size_t totalSize;
 	ssize_t length;
 	status_t status;
 	void* mappedRegion = NULL;
+	typename Class::AddrType base_vaddr, base_vlimit, mapsize;
+	int regionIndex = 0;
 
 	ImageType* image = static_cast<ImageType*>(_image);
 	const EhdrType& elfHeader = image->elf_header;
@@ -226,10 +228,19 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		goto error1;
 	}
 
-	// create an area large enough to hold the image
+	image->count_regions = 0;
 
-	image->data_region.size = 0;
-	image->text_region.size = 0;
+	for (int32 i = 0; i < elfHeader.e_phnum; i++) {
+		PhdrType& header = programHeaders[i];
+		if(header.p_type == PT_LOAD) {
+			if(image->count_regions >= BOOT_ELF_MAX_REGIONS) {
+				dprintf("Too many regions in ELF file. Increase BOOT_ELF_MAX_REGIONS\n");
+				status = B_NO_MEMORY;
+				goto error1;
+			}
+			++image->count_regions;
+		}
+	}
 
 	for (int32 i = 0; i < elfHeader.e_phnum; i++) {
 		PhdrType& header = programHeaders[i];
@@ -243,96 +254,73 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 				continue;
 			case PT_INTERP:
 			case PT_PHDR:
-			case PT_ARM_UNWIND:
+			case PT_GNU_EH_FRAME: // Don't care
+			case PT_GNU_STACK: // Don't care
+			case PT_GNU_RELRO:
+			case PT_NOTE: // Don't care
 				// known but unused type
 				continue;
+			case PT_ARM_EXIDX: // Don't care
+#if defined(__ARM__)
+				image->exidx_section.start = header.p_vaddr;
+				image->exidx_section.size = header.p_memsz;
+#endif
+				continue;
 			default:
-				dprintf("unhandled pheader type 0x%" B_PRIx32 "\n", header.p_type);
+				dprintf("unhandled pheader type 0x%" B_PRIx64 "\n", (uint64_t)header.p_type);
 				continue;
 		}
 
-		RegionType* region;
-		if (header.IsReadWrite()) {
-			if (image->data_region.size != 0) {
-				dprintf("elf: rw already handled!\n");
-				continue;
-			}
-			region = &image->data_region;
-		} else if (header.IsExecutable()) {
-			if (image->text_region.size != 0) {
-				dprintf("elf: ro already handled!\n");
-				continue;
-			}
-			region = &image->text_region;
-		} else
-			continue;
+		RegionType* region = &image->regions[regionIndex];
+		++regionIndex;
 
 		region->start = ROUNDDOWN(header.p_vaddr, B_PAGE_SIZE);
-		region->size = ROUNDUP(header.p_memsz + (header.p_vaddr % B_PAGE_SIZE),
-			B_PAGE_SIZE);
-		region->delta = -region->start;
+		region->size = ROUNDUP(header.p_memsz + header.p_vaddr, B_PAGE_SIZE) - region->start;
+		region->delta = 0;
+		region->protection = B_KERNEL_READ_AREA |
+					(header.p_flags & PF_W ? B_KERNEL_WRITE_AREA : 0) |
+					(header.p_flags & PF_X ? B_KERNEL_EXECUTE_AREA : 0);
 
-		TRACE(("segment %ld: start = 0x%llx, size = %llu, delta = %llx\n", i,
+		TRACE(("segment %ld: start = 0x%llx, size = %llu, delta = %llx, prot = %x\n", i,
 			(uint64)region->start, (uint64)region->size,
-			(int64)(AddrType)region->delta));
+			(int64)(AddrType)region->delta,
+			region->protection));
 	}
 
-	// found both, text and data?
-	if (image->data_region.size == 0 || image->text_region.size == 0) {
-		dprintf("Couldn't find both text and data segment!\n");
-		status = B_BAD_DATA;
-		goto error1;
-	}
+	base_vaddr = image->regions[0].start;
+	base_vlimit = image->regions[image->count_regions - 1].start + image->regions[image->count_regions - 1].size;
+	mapsize = base_vlimit - base_vaddr;
 
-	// get the segment order
-	RegionType* firstRegion;
-	RegionType* secondRegion;
-	if (image->text_region.start < image->data_region.start) {
-		firstRegion = &image->text_region;
-		secondRegion = &image->data_region;
-	} else {
-		firstRegion = &image->data_region;
-		secondRegion = &image->text_region;
-	}
-
-	// The kernel and the modules are relocatable, thus AllocateRegion()
-	// can automatically allocate an address, but shall prefer the specified
-	// base address.
-	totalSize = secondRegion->start + secondRegion->size - firstRegion->start;
-	if (Class::AllocateRegion(&firstRegion->start, totalSize,
-			B_READ_AREA | B_WRITE_AREA, &mappedRegion) != B_OK) {
+	if (Class::AllocateRegion(&base_vaddr, mapsize, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, &mappedRegion) != B_OK) {
 		status = B_NO_MEMORY;
 		goto error1;
 	}
 
-	// initialize the region pointers to the allocated region
-	secondRegion->start += firstRegion->start + firstRegion->delta;
+	image->regions[0].delta = (addr_t)mappedRegion - image->regions[0].start;
 
-	image->data_region.delta += image->data_region.start;
-	image->text_region.delta += image->text_region.start;
+	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
+		image->regions[i].delta = image->regions[0].delta;
+		image->regions[i].start += image->regions[0].delta;
 
-	TRACE(("text: start 0x%llx, size 0x%llx, delta 0x%llx\n",
-		(uint64)image->text_region.start, (uint64)image->text_region.size,
-		(int64)(AddrType)image->text_region.delta));
-	TRACE(("data: start 0x%llx, size 0x%llx, delta 0x%llx\n",
-		(uint64)image->data_region.start, (uint64)image->data_region.size,
-		(int64)(AddrType)image->data_region.delta));
+		TRACE(("#%02d: start 0x%llx, size 0x%llx, delta 0x%llx\n",
+			i,
+			(uint64)image->regions[i].start, (uint64)image->regions[i].size,
+			(int64)(AddrType)image->regions[i].delta));
+
+	}
 
 	// load program data
 
-	for (int32 i = 0; i < elfHeader.e_phnum; i++) {
+	regionIndex = 0;
+
+	for (uint32 i = 0; i < elfHeader.e_phnum; i++) {
 		PhdrType& header = programHeaders[i];
 
 		if (header.p_type != PT_LOAD)
 			continue;
 
-		RegionType* region;
-		if (header.IsReadWrite())
-			region = &image->data_region;
-		else if (header.IsExecutable())
-			region = &image->text_region;
-		else
-			continue;
+		RegionType* region = &image->regions[regionIndex];
+		++regionIndex;
 
 		TRACE(("load segment %ld (%llu bytes) mapped at %p...\n", i,
 			(uint64)header.p_filesz, Class::Map(region->start)));
@@ -340,6 +328,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		length = read_pos(fd, header.p_offset,
 			Class::Map(region->start + (header.p_vaddr % B_PAGE_SIZE)),
 			header.p_filesz);
+
 		if (length < (ssize_t)header.p_filesz) {
 			status = B_BAD_DATA;
 			dprintf("error reading in seg %" B_PRId32 "\n", i);
@@ -350,14 +339,22 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		// area)
 
 		uint32 offset = (header.p_vaddr % B_PAGE_SIZE) + header.p_filesz;
-		if (offset < region->size)
+
+		if (offset < region->size) {
 			memset(Class::Map(region->start + offset), 0, region->size - offset);
+		}
 	}
 
 	// offset dynamic section, and program entry addresses by the delta of the
 	// regions
-	image->dynamic_section.start += image->text_region.delta;
-	image->elf_header.e_entry += image->text_region.delta;
+	image->dynamic_section.start += image->regions[0].delta;
+	image->elf_header.e_entry += image->regions[0].delta;
+
+#if defined(__ARM__)
+	if(image->exidx_section.size) {
+		image->exidx_section.start += image->regions[0].delta;
+	}
+#endif
 
 	image->num_debug_symbols = 0;
 	image->debug_symbols = NULL;
@@ -372,7 +369,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 
 error2:
 	if (mappedRegion != NULL)
-		platform_free_region(mappedRegion, totalSize);
+		platform_free_region(mappedRegion, mapsize);
 error1:
 	free(programHeaders);
 	kernel_args_free(image);
@@ -429,12 +426,20 @@ ELFLoader<Class>::Relocate(preloaded_image* _image)
 			return status;
 	}
 
+	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
+		if(image->regions[i].protection != (B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA)) {
+			platform_protect_region((void *)image->regions[i].start,
+					image->regions[i].size,
+					image->regions[i].protection);
+		}
+	}
+
 	return B_OK;
 }
 
 template<typename Class>
 /*static*/ status_t
-ELFLoader<Class>::Resolve(ImageType* image, SymType* symbol,
+ELFLoader<Class>::Resolve(ImageType* image, const SymType* symbol,
 	AddrType* symbolAddress)
 {
 	switch (symbol->st_shndx) {
@@ -452,7 +457,7 @@ ELFLoader<Class>::Resolve(ImageType* image, SymType* symbol,
 			return B_ERROR;
 		default:
 			// standard symbol
-			*symbolAddress = symbol->st_value + image->text_region.delta;
+			*symbolAddress = symbol->st_value + image->regions[0].delta;
 			return B_OK;
 	}
 }
@@ -587,25 +592,25 @@ ELFLoader<Class>::_ParseDynamicSection(ImageType* image)
 				break;
 			case DT_SYMTAB:
 				image->syms = (SymType*)Class::Map(d[i].d_un.d_ptr
-					+ image->text_region.delta);
+					+ image->regions[0].delta);
 				break;
 			case DT_REL:
 				image->rel = (RelType*)Class::Map(d[i].d_un.d_ptr
-					+ image->text_region.delta);
+					+ image->regions[0].delta);
 				break;
 			case DT_RELSZ:
 				image->rel_len = d[i].d_un.d_val;
 				break;
 			case DT_RELA:
 				image->rela = (RelaType*)Class::Map(d[i].d_un.d_ptr
-					+ image->text_region.delta);
+					+ image->regions[0].delta);
 				break;
 			case DT_RELASZ:
 				image->rela_len = d[i].d_un.d_val;
 				break;
 			case DT_JMPREL:
 				image->pltrel = (RelType*)Class::Map(d[i].d_un.d_ptr
-					+ image->text_region.delta);
+					+ image->regions[0].delta);
 				break;
 			case DT_PLTRELSZ:
 				image->pltrel_len = d[i].d_un.d_val;
@@ -613,7 +618,18 @@ ELFLoader<Class>::_ParseDynamicSection(ImageType* image)
 			case DT_PLTREL:
 				image->pltrel_type = d[i].d_un.d_val;
 				break;
-
+			case DT_RELENT:
+				if(d[i].d_un.d_val != sizeof(typename Class::RelType)) {
+					dprintf("Invalid relocation entry size\n");
+					return B_ERROR;
+				}
+				break;
+			case DT_RELAENT:
+				if(d[i].d_un.d_val != sizeof(typename Class::RelaType)) {
+					dprintf("Invalid addend relocation entry size\n");
+					return B_ERROR;
+				}
+				break;
 			default:
 				continue;
 		}
@@ -739,7 +755,7 @@ elf_relocate_image(preloaded_image* image)
 
 #ifdef BOOT_SUPPORT_ELF32
 status_t
-boot_elf_resolve_symbol(preloaded_elf32_image* image, Elf32_Sym* symbol,
+boot_elf_resolve_symbol(preloaded_elf32_image* image, const Elf32_Sym* symbol,
 	Elf32_Addr* symbolAddress)
 {
 	return ELF32Loader::Resolve(image, symbol, symbolAddress);
@@ -749,7 +765,7 @@ boot_elf_resolve_symbol(preloaded_elf32_image* image, Elf32_Sym* symbol,
 
 #ifdef BOOT_SUPPORT_ELF64
 status_t
-boot_elf_resolve_symbol(preloaded_elf64_image* image, Elf64_Sym* symbol,
+boot_elf_resolve_symbol(preloaded_elf64_image* image, const Elf64_Sym* symbol,
 	Elf64_Addr* symbolAddress)
 {
 	return ELF64Loader::Resolve(image, symbol, symbolAddress);

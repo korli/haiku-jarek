@@ -488,7 +488,7 @@ mmu_free(void *virtualAddress, size_t size)
 
 	// is the address within the valid range?
 	if (address < KERNEL_LOAD_BASE || address + size > sNextVirtualAddress) {
-		panic("mmu_free: asked to unmap out of range region (%p, size %lx)\n",
+		panic("mmu_free: asked to unmap out of range region (%p, size %zx)\n",
 			(void *)address, size);
 	}
 

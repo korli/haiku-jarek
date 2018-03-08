@@ -8,14 +8,15 @@
  */
 
 
-#include <libroot_private.h>
+#include <libroot/libroot_private.h>
 
 #include <dlfcn.h>
 #include <string.h>
+#include <kernel/OS.h>
+#include <sys/mman.h>
 
-#include <runtime_loader.h>
-#include <user_runtime.h>
-
+#include <runtime_loader/runtime_loader.h>
+#include <system/user_runtime.h>
 
 static status_t sStatus;
 	// Note, this is not thread-safe
@@ -41,7 +42,7 @@ dlsym(void *handle, char const *name)
 	void* caller = NULL;
 
 	if (handle == RTLD_NEXT)
-		caller = __arch_get_caller();
+		caller = __builtin_return_address(0);
 
 	status = __gRuntimeLoader->get_library_symbol(handle, caller, name,
 		&location);
@@ -122,4 +123,24 @@ void
 __libc_dlclose(void *handle)
 {
 	dlclose(handle);
+}
+
+int dl_iterate_phdr(__dl_iterate_hdr_callback callback, void * arg)
+{
+	return __gRuntimeLoader->iterate_phdr(callback, arg);
+}
+
+int _rtld_addr_phdr(const void *addr, struct dl_phdr_info *phdr_info_a)
+{
+	return __gRuntimeLoader->get_addr_phdr(addr, phdr_info_a);
+}
+
+int _rtld_get_stack_prot(void)
+{
+	return (PROT_EXEC | PROT_READ | PROT_WRITE);
+}
+
+int _rtld_is_dlopened(void * arg)
+{
+	return (0);
 }

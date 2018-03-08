@@ -63,6 +63,9 @@ struct rld_export gRuntimeLoader = {
 	NULL, // call_atexit_hooks_for_range
 	terminate_program,
 
+	dl_iterate_phdr,
+	_rtld_addr_phdr,
+
 	// the following values will be set later
 	NULL,	// program_args
 	NULL,	// commpage_address

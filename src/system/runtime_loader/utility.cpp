@@ -133,3 +133,12 @@ ktrace_printf(const char *format, ...)
 }
 
 #endif // RUNTIME_LOADER_TRACING
+
+extern "C" void __assert_fail(const char *assertion, const char *file,
+	unsigned int line, const char *function)
+{
+	char buffer[1024];
+	snprintf(buffer, sizeof(buffer), "runtime_loader: %s:%d:%s: %s\n", file, line, function, assertion);
+	debugger(buffer);
+}
+

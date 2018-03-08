@@ -44,13 +44,6 @@ DEFINE_ELF_TYPE(Note_Thread_Entry, elf_note_thread_entry);
 #undef DEFINE_ELF_TYPE
 #undef _ELF_TYPE
 
-
-#if B_HAIKU_64_BIT
-#	define ELF_CLASS	ELFCLASS64
-#else
-#	define ELF_CLASS	ELFCLASS32
-#endif
-
 typedef Elf_Versym elf_versym;
 
 #endif	/* _ELF_PRIVATE_H_ */

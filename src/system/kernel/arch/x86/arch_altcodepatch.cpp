@@ -35,8 +35,8 @@ arch_altcodepatch_replace(uint16 tag, void* newcodepatch, size_t length)
 
 	// we need to write to the text area
 	struct elf_image_info* info = elf_get_kernel_image();
-	uint32 kernelProtection =  B_KERNEL_READ_AREA | B_KERNEL_EXECUTE_AREA;
-	set_area_protection(info->text_region.id, kernelProtection | B_KERNEL_WRITE_AREA);
+	uint32 kernelProtection =  info->regions[0].protection;
+	set_area_protection(info->regions[0].id, kernelProtection | B_KERNEL_WRITE_AREA);
 
 	for (altcodepatch *patch = &altcodepatch_begin; patch < &altcodepatch_end;
 		patch++) {
@@ -50,7 +50,7 @@ arch_altcodepatch_replace(uint16 tag, void* newcodepatch, size_t length)
 	}
 
 	// disable write after patch
-	set_area_protection(info->text_region.id, kernelProtection);
+	set_area_protection(info->regions[0].id, kernelProtection);
 
 	dprintf("arch_altcodepatch_replace found %d altcodepatches\n", count);
 }

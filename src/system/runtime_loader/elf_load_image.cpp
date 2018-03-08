@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 #include <syscalls.h>
 
@@ -35,30 +36,35 @@ get_program_path()
 
 
 static int32
-count_regions(const char* imagePath, char const* buff, int phnum, int phentsize)
+count_regions(const char* imagePath, char const* buff, int phnum, unsigned int phentsize)
 {
-	elf_phdr* pheaders;
+	Elf_Phdr* pheaders;
 	int32 count = 0;
 	int i;
 
 	for (i = 0; i < phnum; i++) {
-		pheaders = (elf_phdr*)(buff + i * phentsize);
+		pheaders = (Elf_Phdr*)(buff + i * phentsize);
 
 		switch (pheaders->p_type) {
 			case PT_NULL:
 				// NOP header
 				break;
 			case PT_LOAD:
-				count += 1;
-				if (pheaders->p_memsz != pheaders->p_filesz) {
-					addr_t A = TO_PAGE_SIZE(pheaders->p_vaddr
-						+ pheaders->p_memsz);
-					addr_t B = TO_PAGE_SIZE(pheaders->p_vaddr
-						+ pheaders->p_filesz);
+				++count;
 
-					if (A != B)
-						count += 1;
+				if (pheaders->p_align & PAGE_MASK) {
+					FATAL("%s: PT_LOAD segment is not page aligned\n", imagePath);
+					return -1;
 				}
+
+				if (pheaders->p_filesz != pheaders->p_memsz) {
+					Elf_Addr bss_vaddr = TO_PAGE_SIZE(pheaders->p_vaddr + pheaders->p_filesz);
+					Elf_Addr bss_vlimit = TO_PAGE_SIZE(pheaders->p_vaddr + pheaders->p_memsz);
+					if(bss_vlimit > bss_vaddr) {
+						++count;
+					}
+				}
+
 				break;
 			case PT_DYNAMIC:
 				// will be handled at some other place
@@ -75,18 +81,21 @@ count_regions(const char* imagePath, char const* buff, int phnum, int phentsize)
 			case PT_PHDR:
 				// we don't use it
 				break;
-			case PT_RELRO:
+			case PT_GNU_RELRO:
 				// not implemented yet, but can be ignored
 				break;
-			case PT_STACK:
+			case PT_GNU_STACK:
 				// we don't use it
 				break;
 			case PT_TLS:
 				// will be handled at some other place
 				break;
+			case PT_GNU_EH_FRAME:
+				// don't care
+				break;
 			default:
-				FATAL("%s: Unhandled pheader type in count 0x%" B_PRIx32 "\n",
-					imagePath, pheaders->p_type);
+				FATAL("%s: Unhandled pheader type in count 0x%lx\n",
+					imagePath, (unsigned long)pheaders->p_type);
 				break;
 		}
 	}
@@ -98,7 +107,7 @@ count_regions(const char* imagePath, char const* buff, int phnum, int phentsize)
 static status_t
 parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 {
-	elf_phdr* pheader;
+	Elf_Phdr* pheader;
 	int regcount;
 	int i;
 
@@ -106,83 +115,74 @@ parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 
 	regcount = 0;
 	for (i = 0; i < phnum; i++) {
-		pheader = (elf_phdr*)(buff + i * phentsize);
+		pheader = (Elf_Phdr*)(buff + i * phentsize);
 
 		switch (pheader->p_type) {
 			case PT_NULL:
 				/* NOP header */
 				break;
 			case PT_LOAD:
-				if (pheader->p_memsz == pheader->p_filesz) {
-					/*
-					 * everything in one area
-					 */
-					image->regions[regcount].start = pheader->p_vaddr;
-					image->regions[regcount].size = pheader->p_memsz;
-					image->regions[regcount].vmstart
-						= PAGE_BASE(pheader->p_vaddr);
-					image->regions[regcount].vmsize
-						= TO_PAGE_SIZE(pheader->p_memsz
-							+ PAGE_OFFSET(pheader->p_vaddr));
-					image->regions[regcount].fdstart = pheader->p_offset;
-					image->regions[regcount].fdsize = pheader->p_filesz;
-					image->regions[regcount].delta = 0;
-					image->regions[regcount].flags = 0;
-					if (pheader->p_flags & PF_WRITE) {
-						// this is a writable segment
-						image->regions[regcount].flags |= RFLAG_RW;
-					}
-				} else {
-					/*
-					 * may require splitting
-					 */
-					addr_t A = TO_PAGE_SIZE(pheader->p_vaddr
-						+ pheader->p_memsz);
-					addr_t B = TO_PAGE_SIZE(pheader->p_vaddr
-						+ pheader->p_filesz);
+				assert(regcount < (int)image->num_regions);
 
-					image->regions[regcount].start = pheader->p_vaddr;
-					image->regions[regcount].size = pheader->p_filesz;
-					image->regions[regcount].vmstart
-						= PAGE_BASE(pheader->p_vaddr);
-					image->regions[regcount].vmsize
-						= TO_PAGE_SIZE(pheader->p_filesz
-							+ PAGE_OFFSET(pheader->p_vaddr));
-					image->regions[regcount].fdstart = pheader->p_offset;
-					image->regions[regcount].fdsize = pheader->p_filesz;
-					image->regions[regcount].delta = 0;
-					image->regions[regcount].flags = 0;
-					if (pheader->p_flags & PF_WRITE) {
-						// this is a writable segment
-						image->regions[regcount].flags |= RFLAG_RW;
-					}
+				image->regions[regcount].start = pheader->p_vaddr;
+				image->regions[regcount].size = pheader->p_filesz;
+				image->regions[regcount].vmstart = PAGE_BASE(pheader->p_vaddr);
+				image->regions[regcount].vmsize	= TO_PAGE_SIZE(pheader->p_vaddr + pheader->p_filesz) - PAGE_BASE(pheader->p_vaddr);
+				image->regions[regcount].fdstart = pheader->p_offset;
+				image->regions[regcount].fdsize = pheader->p_filesz;
+				image->regions[regcount].delta = 0;
+				image->regions[regcount].flags = 0;
 
-					if (A != B) {
-						/*
-						 * yeah, it requires splitting
-						 */
-						regcount += 1;
-						image->regions[regcount].start = pheader->p_vaddr;
-						image->regions[regcount].size
-							= pheader->p_memsz - pheader->p_filesz;
-						image->regions[regcount].vmstart
-							= image->regions[regcount-1].vmstart
-								+ image->regions[regcount-1].vmsize;
-						image->regions[regcount].vmsize
-							= TO_PAGE_SIZE(pheader->p_memsz
-									+ PAGE_OFFSET(pheader->p_vaddr))
-								- image->regions[regcount-1].vmsize;
+				TRACE(("%s: vmstart=%p vmsize=%zd\n",
+						image->path,
+						(void *)image->regions[regcount].vmstart,
+						(size_t)image->regions[regcount].vmsize));
+
+				if(pheader->p_flags & PF_W) {
+					image->regions[regcount].flags |= RFLAG_RW;
+				}
+
+				if(pheader->p_flags & PF_X) {
+					image->regions[regcount].flags |= RFLAG_EXECUTABLE;
+				}
+
+				++regcount;
+
+				if(pheader->p_filesz != pheader->p_memsz) {
+					image->regions[regcount - 1].flags |= RFLAG_CLEAR_TRAILER;
+
+					Elf_Addr bss_vaddr = TO_PAGE_SIZE(pheader->p_vaddr + pheader->p_filesz);
+					Elf_Addr bss_vlimit = TO_PAGE_SIZE(pheader->p_vaddr + pheader->p_memsz);
+
+					if(bss_vlimit > bss_vaddr) {
+						assert(regcount < (int)image->num_regions);
+
+						image->regions[regcount].start = pheader->p_vaddr + pheader->p_filesz;
+						image->regions[regcount].size = pheader->p_memsz - pheader->p_filesz;
+						image->regions[regcount].vmstart = bss_vaddr;
+						image->regions[regcount].vmsize	= bss_vlimit - bss_vaddr;
 						image->regions[regcount].fdstart = 0;
 						image->regions[regcount].fdsize = 0;
 						image->regions[regcount].delta = 0;
 						image->regions[regcount].flags = RFLAG_ANON;
-						if (pheader->p_flags & PF_WRITE) {
-							// this is a writable segment
+
+						TRACE(("%s: bss - vmstart=%p vmsize=%zd\n",
+								image->path,
+								(void *)image->regions[regcount].vmstart,
+								(size_t)image->regions[regcount].vmsize));
+
+						if(pheader->p_flags & PF_W) {
 							image->regions[regcount].flags |= RFLAG_RW;
 						}
+
+						if(pheader->p_flags & PF_X) {
+							image->regions[regcount].flags |= RFLAG_EXECUTABLE;
+						}
+
+						++regcount;
 					}
 				}
-				regcount += 1;
+
 				break;
 			case PT_DYNAMIC:
 				image->dynamic_ptr = pheader->p_vaddr;
@@ -199,11 +199,15 @@ parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 			case PT_PHDR:
 				// we don't use it
 				break;
-			case PT_RELRO:
-				// not implemented yet, but can be ignored
+			case PT_GNU_RELRO:
+				image->relro_page = PAGE_BASE(pheader->p_vaddr);
+				image->relro_size = TO_PAGE_SIZE(pheader->p_memsz);
 				break;
-			case PT_STACK:
+			case PT_GNU_STACK:
 				// we don't use it
+				break;
+			case PT_GNU_EH_FRAME:
+				// don't care
 				break;
 			case PT_TLS:
 				image->dso_tls_id
@@ -212,8 +216,8 @@ parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 							pheader->p_filesz, pheader->p_memsz));
 				break;
 			default:
-				FATAL("%s: Unhandled pheader type in parse 0x%" B_PRIx32 "\n",
-					image->path, pheader->p_type);
+				FATAL("%s: Unhandled pheader type in parse 0x%lx\n",
+					image->path, (unsigned long)pheader->p_type);
 				return B_BAD_DATA;
 		}
 	}
@@ -245,15 +249,19 @@ assert_dynamic_loadable(image_t* image)
 static bool
 parse_dynamic_segment(image_t* image)
 {
-	elf_dyn* d;
+	Elf_Dyn* d;
 	int i;
 	int sonameOffset = -1;
+	const Elf_Hashelt * hashtab;
+    Elf32_Word bkt, nmaskwords;
+    int bloom_size32;
 
-	image->symhash = 0;
+	image->valid_hash_sysv = false;
+	image->valid_hash_gnu = false;
 	image->syms = 0;
 	image->strtab = 0;
 
-	d = (elf_dyn*)image->dynamic_ptr;
+	d = (Elf_Dyn*)image->dynamic_ptr;
 	if (!d)
 		return true;
 
@@ -263,26 +271,44 @@ parse_dynamic_segment(image_t* image)
 				image->num_needed += 1;
 				break;
 			case DT_HASH:
-				image->symhash
-					= (uint32*)(d[i].d_un.d_ptr + image->regions[0].delta);
+				hashtab = (const Elf_Hashelt *)(d[i].d_un.d_ptr	+ image->regions[0].delta);
+				image->nbuckets = hashtab[0];
+				image->nchains = hashtab[1];
+				image->buckets = hashtab + 2;
+				image->chains = image->buckets + image->nbuckets;
+				image->valid_hash_sysv = image->nbuckets > 0 && image->nchains > 0 && image->buckets != NULL;
+				break;
+			case DT_GNU_HASH:
+				hashtab = (const Elf_Hashelt *)(d[i].d_un.d_ptr	+ image->regions[0].delta);
+				image->nbuckets_gnu = hashtab[0];
+				image->symndx_gnu = hashtab[1];
+				nmaskwords = hashtab[2];
+				bloom_size32 = (__ELF_WORD_SIZE / 32) * nmaskwords;
+				image->maskwords_bm_gnu = nmaskwords - 1;
+				image->shift2_gnu = hashtab[3];
+				image->bloom_gnu = (Elf_Addr *) (hashtab + 4);
+				image->buckets_gnu = hashtab + 4 + bloom_size32;
+				image->chain_zero_gnu = image->buckets_gnu + image->nbuckets_gnu - image->symndx_gnu;
+				/* Number of bitmask words is required to be power of 2 */
+				image->valid_hash_gnu = powerof2(nmaskwords) && image->nbuckets_gnu > 0 && image->buckets_gnu != NULL;
 				break;
 			case DT_STRTAB:
 				image->strtab
 					= (char*)(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_SYMTAB:
-				image->syms = (elf_sym*)
+				image->syms = (Elf_Sym*)
 					(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_REL:
-				image->rel = (elf_rel*)
+				image->rel = (Elf_Rel*)
 					(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_RELSZ:
 				image->rel_len = d[i].d_un.d_val;
 				break;
 			case DT_RELA:
-				image->rela = (elf_rela*)
+				image->rela = (Elf_Rela*)
 					(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_RELASZ:
@@ -290,7 +316,7 @@ parse_dynamic_segment(image_t* image)
 				break;
 			case DT_JMPREL:
 				// procedure linkage table relocations
-				image->pltrel = (elf_rel*)
+				image->pltrel = (Elf_Rel*)
 					(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_PLTRELSZ:
@@ -312,14 +338,14 @@ parse_dynamic_segment(image_t* image)
 					(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_VERDEF:
-				image->version_definitions = (elf_verdef*)
+				image->version_definitions = (Elf_Verdef*)
 					(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_VERDEFNUM:
 				image->num_version_definitions = d[i].d_un.d_val;
 				break;
 			case DT_VERNEED:
-				image->needed_versions = (elf_verneed*)
+				image->needed_versions = (Elf_Verneed*)
 					(d[i].d_un.d_ptr + image->regions[0].delta);
 				break;
 			case DT_VERNEEDNUM:
@@ -336,6 +362,9 @@ parse_dynamic_segment(image_t* image)
 				if ((flags & DF_STATIC_TLS) != 0) {
 					FATAL("Static TLS model is not supported.\n");
 					return false;
+				}
+				if((flags & DT_TEXTREL) != 0) {
+					image->flags |= RFLAG_TEXTREL;
 				}
 				break;
 			}
@@ -366,6 +395,9 @@ parse_dynamic_segment(image_t* image)
 				// size in bytes of the array of termination functions
 				image->term_array_len = d[i].d_un.d_val;
 				break;
+			case DT_TEXTREL:
+				image->flags |= RFLAG_TEXTREL;
+				break;
 			default:
 				continue;
 
@@ -382,33 +414,101 @@ parse_dynamic_segment(image_t* image)
 	}
 
 	// lets make sure we found all the required sections
-	if (!image->symhash || !image->syms || !image->strtab)
+	// lets make sure we found all the required sections
+	if (!image->syms || !image->strtab)
+		return false;
+
+	if(!image->valid_hash_sysv && !image->valid_hash_gnu)
 		return false;
 
 	if (sonameOffset >= 0)
-		strlcpy(image->name, STRING(image, sonameOffset), sizeof(image->name));
+		strlcpy(image->name, image->String(sonameOffset), sizeof(image->name));
+
+	if (image->valid_hash_sysv) {
+		image->dynsymcount = image->nchains;
+	} else if (image->valid_hash_gnu) {
+	    const Elf32_Word *hashval;
+		image->dynsymcount = 0;
+		for (bkt = 0; bkt < image->nbuckets_gnu; bkt++) {
+			if (image->buckets_gnu[bkt] == 0)
+				continue;
+			hashval = &image->chain_zero_gnu[image->buckets_gnu[bkt]];
+			do {
+				image->dynsymcount++;
+			} while ((*hashval++ & 1u) == 0);
+		}
+		image->dynsymcount += image->symndx_gnu;
+	}
 
 	return true;
 }
 
+bool elf_handle_textrel(image_t * image, bool before)
+{
+	TRACE(("%s: Handle text relocations (%s)\n", image->path, before ? "before" : "after"));
+
+	for(uint32 i = 0 ; i < image->num_regions ; ++i) {
+		if(image->regions[i].flags & RFLAG_RW)
+			continue;
+
+		uint32 protection = B_READ_AREA
+			| ((image->regions[i].flags & RFLAG_EXECUTABLE) ? B_EXECUTE_AREA : 0)
+			| (before ? B_WRITE_AREA : 0);
+
+		TRACE(("%s: set protection of %p--%p to %x\n",
+				image->path,
+				(void *)image->regions[i].vmstart,
+				(void *)(image->regions[i].vmstart + image->regions[i].vmsize),
+				protection));
+
+		status_t status = _kern_set_memory_protection((void *)image->regions[i].vmstart, image->regions[i].vmsize, protection);
+
+		if(status != B_OK) {
+			TRACE(("Can't enforce region protection for %s (%d)\n", image->name, status));
+			return false;
+		}
+	}
+	return true;
+}
+
+bool elf_handle_relro(image_t * image)
+{
+	if(image->relro_size > 0){
+		TRACE(("%s: set relro protection of %p--%p\n",
+				(void *)(image->regions[0].delta + image->relro_page),
+				(void *)(image->regions[0].delta + image->relro_page + image->relro_size)));
+
+		status_t status = _kern_set_memory_protection((void *)(image->relro_page +
+				image->regions[0].delta),
+				image->relro_size, B_READ_AREA);
+		if(status != B_OK) {
+			TRACE(("Can't enforce relro protection for %s (%d)\n", image->name, status));
+			return false;
+		}
+
+		image->relro_size = 0;
+		image->relro_page = 0;
+	}
+	return true;
+}
 
 // #pragma mark -
 
 
 status_t
-parse_elf_header(elf_ehdr* eheader, int32* _pheaderSize,
+parse_elf_header(Elf_Ehdr* eheader, int32* _pheaderSize,
 	int32* _sheaderSize)
 {
 	if (memcmp(eheader->e_ident, ELFMAG, 4) != 0)
 		return B_NOT_AN_EXECUTABLE;
 
-	if (eheader->e_ident[4] != ELF_CLASS)
+	if (eheader->e_ident[EI_CLASS] != ELF_CLASS)
 		return B_NOT_AN_EXECUTABLE;
 
 	if (eheader->e_phoff == 0)
 		return B_NOT_AN_EXECUTABLE;
 
-	if (eheader->e_phentsize < sizeof(elf_phdr))
+	if (eheader->e_phentsize < sizeof(Elf_Phdr))
 		return B_NOT_AN_EXECUTABLE;
 
 	*_pheaderSize = eheader->e_phentsize * eheader->e_phnum;
@@ -435,7 +535,7 @@ load_image(char const* name, image_type type, const char* rpath,
 	status_t status;
 	int fd;
 
-	elf_ehdr eheader;
+	Elf_Ehdr eheader;
 
 	// Have we already loaded that image? Don't check for add-ons -- we always
 	// reload them.
@@ -509,8 +609,8 @@ load_image(char const* name, image_type type, const char* rpath,
 
 	// ToDo: what to do about this restriction??
 	if (pheaderSize > (int)sizeof(pheaderBuffer)) {
-		FATAL("%s: Cannot handle program headers bigger than %lu\n",
-			path, sizeof(pheaderBuffer));
+		FATAL("%s: Cannot handle program headers bigger than %d\n",
+			path, (int)sizeof(pheaderBuffer));
 		status = B_UNSUPPORTED;
 		goto err1;
 	}
@@ -551,7 +651,7 @@ load_image(char const* name, image_type type, const char* rpath,
 		goto err2;
 	}
 
-	status = map_image(fd, path, image, eheader.e_type == ET_EXEC);
+	status = map_image(fd, path, image, eheader, type == B_APP_IMAGE);
 	if (status < B_OK) {
 		FATAL("%s: Could not map image: %s\n", image->path, strerror(status));
 		status = B_ERROR;
@@ -561,6 +661,12 @@ load_image(char const* name, image_type type, const char* rpath,
 	if (!parse_dynamic_segment(image)) {
 		FATAL("%s: Troubles handling dynamic section\n", image->path);
 		status = B_BAD_DATA;
+		goto err3;
+	}
+
+	if ((image->flags & RFLAG_TEXTREL) &&  !elf_handle_textrel(image, true)) {
+		FATAL("%s: Can't prepare text relocations\n", image->path);
+		status = B_ERROR;
 		goto err3;
 	}
 

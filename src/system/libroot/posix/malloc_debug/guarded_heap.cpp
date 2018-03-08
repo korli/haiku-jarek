@@ -234,7 +234,7 @@ static void
 guarded_heap_print_stack_trace(addr_t stackTrace[], size_t depth)
 {
 	char* imageName;
-	char* symbolName;
+	const char* symbolName;
 	void* location;
 	bool exactMatch;
 
