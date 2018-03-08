@@ -334,7 +334,7 @@ try_acquire_spinlock(spinlock* lock)
 		return false;
 
 #	if DEBUG_SPINLOCKS
-	push_lock_caller(arch_debug_get_caller(), lock);
+	push_lock_caller(__builtin_return_address(0), lock);
 #	endif
 #endif
 
@@ -382,7 +382,7 @@ acquire_spinlock(spinlock* lock)
 		}
 
 #	if DEBUG_SPINLOCKS
-		push_lock_caller(arch_debug_get_caller(), lock);
+		push_lock_caller(__builtin_return_address(0), lock);
 #	endif
 #endif
 	} else {
@@ -394,7 +394,7 @@ acquire_spinlock(spinlock* lock)
 				find_lock_caller(lock), oldValue);
 		}
 
-		push_lock_caller(arch_debug_get_caller(), lock);
+		push_lock_caller(__builtin_return_address(0), lock);
 #endif
 	}
 #if DEBUG_SPINLOCK_LATENCIES
@@ -442,7 +442,7 @@ acquire_spinlock_nocheck(spinlock *lock)
 		}
 
 #	if DEBUG_SPINLOCKS
-		push_lock_caller(arch_debug_get_caller(), lock);
+		push_lock_caller(__builtin_return_address(0), lock);
 #	endif
 #endif
 	} else {
@@ -454,7 +454,7 @@ acquire_spinlock_nocheck(spinlock *lock)
 				lock, find_lock_caller(lock), oldValue);
 		}
 
-		push_lock_caller(arch_debug_get_caller(), lock);
+		push_lock_caller(__builtin_return_address(0), lock);
 #endif
 	}
 }
@@ -500,7 +500,7 @@ acquire_spinlock_cpu(int32 currentCPU, spinlock *lock)
 		}
 
 #	if DEBUG_SPINLOCKS
-		push_lock_caller(arch_debug_get_caller(), lock);
+		push_lock_caller(__builtin_return_address(0), lock);
 #	endif
 #endif
 	} else {
@@ -512,7 +512,7 @@ acquire_spinlock_cpu(int32 currentCPU, spinlock *lock)
 				find_lock_caller(lock), oldValue);
 		}
 
-		push_lock_caller(arch_debug_get_caller(), lock);
+		push_lock_caller(__builtin_return_address(0), lock);
 #endif
 	}
 }
