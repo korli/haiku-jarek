@@ -301,9 +301,13 @@ switch_thread(Thread* fromThread, Thread* toThread)
 	fromThread->cpu = NULL;
 	cpu->running_thread = toThread;
 	cpu->previous_thread = fromThread;
+	
+	cpu->deferred_deleter_blocked = true;
 
 	arch_thread_set_current_thread(toThread);
 	arch_thread_context_switch(fromThread, toThread);
+
+	cpu->deferred_deleter_blocked = false;
 
 	// The use of fromThread below looks weird, but is correct. fromThread had
 	// been unscheduled earlier, but is back now. For a thread scheduled the
