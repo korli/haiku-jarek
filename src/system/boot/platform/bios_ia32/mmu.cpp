@@ -20,6 +20,7 @@
 #include <boot/kernel_args.h>
 #include <boot/stage2.h>
 #include <kernel.h>
+#include <system/vm_defs.h>
 
 #include "bios.h"
 #include "interrupts.h"
@@ -790,6 +791,41 @@ platform_free_region(void *address, size_t size)
 	return B_OK;
 }
 
+status_t platform_protect_region(void * address, size_t size, uint32 protection)
+{
+	addr_t virtualAddress = ROUNDDOWN((addr_t)address, B_PAGE_SIZE);
+	size = ROUNDUP(size, B_PAGE_SIZE);
+
+
+	if (virtualAddress < KERNEL_LOAD_BASE) {
+		panic("platform_protect_region: asked to remap invalid page %p!\n",
+			(void *)virtualAddress);
+	}
+
+	while(size > 0) {
+		uint32 *pageTable = (uint32 *)(sPageDirectory[virtualAddress / (B_PAGE_SIZE * 1024)] & 0xfffff000);
+
+		if (pageTable == NULL) {
+			panic("No page table when remapping memory\n");
+		}
+
+		// map the page to the correct page table
+		uint32 tableEntry = (virtualAddress % (B_PAGE_SIZE * 1024)) / B_PAGE_SIZE;
+		uint32 physicalAddress = pageTable[tableEntry] & ~(B_PAGE_SIZE - 1);
+
+		pageTable[tableEntry] = physicalAddress |
+				((protection & (B_KERNEL_WRITE_AREA | B_KERNEL_EXECUTE_AREA | B_WRITE_AREA | B_EXECUTE_AREA)) ? 2 : 0) |
+				1;
+
+		asm volatile("invlpg (%0)" : : "r" (virtualAddress));
+
+		virtualAddress += B_PAGE_SIZE;
+		size -= B_PAGE_SIZE;
+	}
+
+	// Not needed
+	return B_OK;
+}
 
 void
 platform_release_heap(struct stage2_args *args, void *base)
