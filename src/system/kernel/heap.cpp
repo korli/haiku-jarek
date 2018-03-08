@@ -203,8 +203,7 @@ static bool sAddGrowHeap = false;
 static DeferredFreeList sDeferredFreeList;
 static DeferredDeletableList sDeferredDeletableList;
 static spinlock sDeferredFreeListLock;
-
-
+static ConditionVariable sDeferredDeleteCond;
 
 // #pragma mark - Tracing
 
@@ -2000,29 +1999,38 @@ heap_grow_thread(void *)
 #endif	// USE_DEBUG_HEAP_FOR_MALLOC
 
 
-static void
-deferred_deleter(void *arg, int iteration)
+static status_t deferred_deleter(void *arg)
 {
 	// move entries and deletables to on-stack lists
-	InterruptsSpinLocker locker(sDeferredFreeListLock);
-	if (sDeferredFreeList.IsEmpty() && sDeferredDeletableList.IsEmpty())
-		return;
+	for(;;) {
+		InterruptsSpinLocker locker(sDeferredFreeListLock);
+		if (sDeferredFreeList.IsEmpty() && sDeferredDeletableList.IsEmpty()) {
+			ConditionVariableEntry entry;
+			sDeferredDeleteCond.Add(&entry);
+			locker.Unlock();
+			// Wait up to 1 second for another run
+			entry.Wait(1000000);
+			continue;
+		}
 
-	DeferredFreeList entries;
-	entries.MoveFrom(&sDeferredFreeList);
+		DeferredFreeList entries;
+		entries.MoveFrom(&sDeferredFreeList);
 
-	DeferredDeletableList deletables;
-	deletables.MoveFrom(&sDeferredDeletableList);
+		DeferredDeletableList deletables;
+		deletables.MoveFrom(&sDeferredDeletableList);
 
-	locker.Unlock();
+		locker.Unlock();
 
-	// free the entries
-	while (DeferredFreeListEntry* entry = entries.RemoveHead())
-		free(entry);
+		// free the entries
+		while (DeferredFreeListEntry* entry = entries.RemoveHead())
+			free(entry);
 
-	// delete the deletables
-	while (DeferredDeletable* deletable = deletables.RemoveHead())
-		delete deletable;
+		// delete the deletables
+		while (DeferredDeletable* deletable = deletables.RemoveHead())
+			delete deletable;
+	}
+
+	return B_OK;
 }
 
 
@@ -2081,6 +2089,9 @@ heap_init(addr_t base, size_t size)
 		"specified, by allocation count. If given <heap> specifies the\n"
 		"address of the heap for which to print the allocations.\n", 0);
 #endif // KERNEL_HEAP_LEAK_CHECK
+
+	sDeferredDeleteCond.Init(&sDeferredFreeList, "deferred_deleter");
+
 	return B_OK;
 }
 
@@ -2141,6 +2152,7 @@ heap_init_post_area()
 status_t
 heap_init_post_sem()
 {
+
 	sHeapGrowSem = create_sem(0, "heap_grow_sem");
 	if (sHeapGrowSem < 0) {
 		panic("heap_init_post_sem(): failed to create heap grow sem\n");
@@ -2214,9 +2226,13 @@ heap_init_post_thread()
 #endif	// KERNEL_HEAP_LEAK_CHECK
 #endif	// !USE_DEBUG_HEAP_FOR_MALLOC
 
-	// run the deferred deleter roughly once a second
-	if (register_kernel_daemon(deferred_deleter, NULL, 10) != B_OK)
+
+	thread_id thread = spawn_kernel_thread(deferred_deleter, "deferred_deleter", B_LOW_PRIORITY, nullptr);
+
+	if(thread < 0)
 		panic("heap_init_post_thread(): failed to init deferred deleter");
+
+	resume_thread(thread);
 
 	return B_OK;
 }
@@ -2499,6 +2515,8 @@ deferred_free(void *block)
 	DeferredFreeListEntry *entry = new(block) DeferredFreeListEntry;
 
 	InterruptsSpinLocker _(sDeferredFreeListLock);
+	if(sDeferredFreeList.IsEmpty())
+		sDeferredDeleteCond.NotifyOne();
 	sDeferredFreeList.Add(entry);
 }
 
@@ -2551,5 +2569,12 @@ deferred_delete(DeferredDeletable *deletable)
 		return;
 
 	InterruptsSpinLocker _(sDeferredFreeListLock);
+
+	if(sDeferredDeletableList.IsEmpty()) {
+		cpu_ent * cpu = get_cpu_struct();
+		if(!cpu->deferred_deleter_blocked) {
+			sDeferredDeleteCond.NotifyOne();
+		}
+	}
 	sDeferredDeletableList.Add(deletable);
 }

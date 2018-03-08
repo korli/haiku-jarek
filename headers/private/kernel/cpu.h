@@ -74,6 +74,7 @@ typedef struct cpu_ent {
 	Thread*			previous_thread;
 	bool			invoke_scheduler;
 	bool			disabled;
+	bool			deferred_deleter_blocked;
 
 	// CPU topology information
 	int				topology_id[CPU_TOPOLOGY_LEVELS];
