@@ -111,8 +111,32 @@ struct ElfClass64 {
 	typedef Elf64_Note_Area_Entry	NoteAreaEntry;
 	typedef Elf64_Note_Image_Entry	NoteImageEntry;
 	typedef Elf64_Note_Thread_Entry	NoteThreadEntry;
+namespace BPrivate {
+
+template<int _Size> struct Field_Swapper {
 };
 
+template<> struct Field_Swapper<1> {
+	static inline uint8 _Swap(const uint8 value) { return value; }
+};
+
+template<> struct Field_Swapper<2> {
+	static inline uint16 _Swap(const uint16 value) { return (uint16)B_SWAP_INT16(value); }
+};
+
+template<> struct Field_Swapper<4> {
+	static inline uint32 _Swap(const uint32 value) { return (uint32)B_SWAP_INT32(value); }
+};
+
+template<> struct Field_Swapper<8> {
+	static inline uint64 _Swap(const uint64 value) { return (uint64)B_SWAP_INT64(value); }
+};
+
+template<typename T> static T _Swap(const T& value) {
+	return Field_Swapper<sizeof(T)>::_Swap(value);
+}
+
+}  // namespace BPrivate
 
 class ElfFile {
 public:
@@ -181,19 +205,6 @@ private:
 			bool				_CheckElfHeader(
 									typename ElfClass::Ehdr& elfHeader);
 
-	static	uint8				_Swap(const uint8& value)
-									{ return value; }
-	static	uint16				_Swap(const uint16& value)
-									{ return (uint16)B_SWAP_INT16(value); }
-	static	int32				_Swap(const int32& value)
-									{ return B_SWAP_INT32(value); }
-	static	uint32				_Swap(const uint32& value)
-									{ return (uint32)B_SWAP_INT32(value); }
-	static	int64				_Swap(const int64& value)
-									{ return B_SWAP_INT64(value); }
-	static	uint64				_Swap(const uint64& value)
-									{ return (uint64)B_SWAP_INT64(value); }
-
 private:
 			uint64				fFileSize;
 			int					fFD;
@@ -212,7 +223,7 @@ ElfFile::StaticGet(const Value& value, bool swappedByteOrder)
 {
 	if (!swappedByteOrder)
 		return value;
-	return _Swap(value);
+	return BPrivate::Field_Swapper<sizeof(Value)>::_Swap(value);
 }
 
 
