@@ -255,7 +255,7 @@ static status_t load_driver(legacy_driver *driver);
 
 
 static DriverWatcher sDriverWatcher;
-static int32 sDriverEventsPending;
+static sem_id sDriverWatcherEventSemaphore;
 static DriverEventList sDriverEvents;
 static mutex sDriverEventsLock = MUTEX_INITIALIZER("driver events");
 	// inner lock, protects the sDriverEvents list only
@@ -504,7 +504,9 @@ change_driver_watcher(dev_t device, ino_t node, bool add)
 	MutexLocker _(sDriverEventsLock);
 	sDriverEvents.Add(event);
 
-	atomic_add(&sDriverEventsPending, 1);
+	if(sDriverEvents.Count() == 1) {
+		release_sem(sDriverWatcherEventSemaphore);
+	}
 }
 
 
@@ -691,88 +693,85 @@ reload_driver(legacy_driver *driver)
 }
 
 
-static void
-handle_driver_events(void */*_fs*/, int /*iteration*/)
+static status_t handle_driver_events(void *)
 {
-	if (atomic_and(&sDriverEventsPending, 0) == 0)
-		return;
-
-	// something happened, let's see what it was
-
 	while (true) {
-		MutexLocker eventLocker(sDriverEventsLock);
+		acquire_sem(sDriverWatcherEventSemaphore);
 
-		driver_event* event = sDriverEvents.RemoveHead();
-		if (event == NULL)
-			break;
+		while(true) {
+			MutexLocker eventLocker(sDriverEventsLock);
 
-		eventLocker.Unlock();
-		TRACE(("driver event %p, type %d\n", event, event->type));
+			driver_event* event = sDriverEvents.RemoveHead();
 
-		switch (event->type) {
-			case kAddDriver:
-			{
-				// Add new drivers
-				RecursiveLocker locker(sLock);
-				TRACE(("  add driver %p\n", event->path));
-
-				legacy_driver* driver = sDriverHash->Lookup(
-					get_leaf(event->path));
-				if (driver == NULL)
-					legacy_driver_add(event->path);
-				else if (get_priority(event->path) >= driver->priority)
-					driver->binary_updated = true;
+			if (event == NULL)
 				break;
+
+			eventLocker.Unlock();
+			TRACE(("driver event %p, type %d\n", event, event->type));
+
+			switch (event->type) {
+				case kAddDriver:
+				{
+					// Add new drivers
+					RecursiveLocker locker(sLock);
+					TRACE(("  add driver %p\n", event->path));
+
+					legacy_driver* driver = sDriverHash->Lookup(
+						get_leaf(event->path));
+					if (driver == NULL)
+						legacy_driver_add(event->path);
+					else if (get_priority(event->path) >= driver->priority)
+						driver->binary_updated = true;
+					break;
+				}
+
+				case kRemoveDriver:
+				{
+					// Mark removed drivers as updated
+					RecursiveLocker locker(sLock);
+					TRACE(("  remove driver %p\n", event->path));
+
+					legacy_driver* driver = sDriverHash->Lookup(
+						get_leaf(event->path));
+					if (driver != NULL
+						&& get_priority(event->path) >= driver->priority)
+						driver->binary_updated = true;
+					break;
+				}
+
+				case kAddWatcher:
+					TRACE(("  add watcher %ld:%lld\n", event->node.device,
+						event->node.node));
+					add_node_listener(event->node.device, event->node.node,
+						B_WATCH_STAT | B_WATCH_NAME, sDriverWatcher);
+					break;
+
+				case kRemoveWatcher:
+					TRACE(("  remove watcher %ld:%lld\n", event->node.device,
+						event->node.node));
+					remove_node_listener(event->node.device, event->node.node,
+						sDriverWatcher);
+					break;
 			}
 
-			case kRemoveDriver:
-			{
-				// Mark removed drivers as updated
-				RecursiveLocker locker(sLock);
-				TRACE(("  remove driver %p\n", event->path));
-
-				legacy_driver* driver = sDriverHash->Lookup(
-					get_leaf(event->path));
-				if (driver != NULL
-					&& get_priority(event->path) >= driver->priority)
-					driver->binary_updated = true;
-				break;
-			}
-
-			case kAddWatcher:
-				TRACE(("  add watcher %ld:%lld\n", event->node.device,
-					event->node.node));
-				add_node_listener(event->node.device, event->node.node,
-					B_WATCH_STAT | B_WATCH_NAME, sDriverWatcher);
-				break;
-
-			case kRemoveWatcher:
-				TRACE(("  remove watcher %ld:%lld\n", event->node.device,
-					event->node.node));
-				remove_node_listener(event->node.device, event->node.node,
-					sDriverWatcher);
-				break;
+			delete event;
 		}
 
-		delete event;
+		// Reload updated drivers
+
+		RecursiveLocker locker(sLock);
+
+		DriverTable::Iterator iterator(sDriverHash);
+		while (iterator.HasNext()) {
+			legacy_driver *driver = iterator.Next();
+
+			if (!driver->binary_updated || driver->devices_used != 0)
+				continue;
+
+			// try to reload the driver
+			reload_driver(driver);
+		}
 	}
-
-	// Reload updated drivers
-
-	RecursiveLocker locker(sLock);
-
-	DriverTable::Iterator iterator(sDriverHash);
-	while (iterator.HasNext()) {
-		legacy_driver *driver = iterator.Next();
-
-		if (!driver->binary_updated || driver->devices_used != 0)
-			continue;
-
-		// try to reload the driver
-		reload_driver(driver);
-	}
-
-	locker.Unlock();
 }
 
 
@@ -809,7 +808,7 @@ DriverWatcher::EventOccurred(NotificationService& service,
 
 	if (driver->devices_used == 0) {
 		// trigger a reload of the driver
-		atomic_add(&sDriverEventsPending, 1);
+		release_sem(sDriverWatcherEventSemaphore);
 	} else {
 		// driver is in use right now
 		dprintf("devfs: changed driver \"%s\" is still in use\n", driver->name);
@@ -1098,7 +1097,10 @@ DirectoryWatcher::EventOccurred(NotificationService& service,
 
 	MutexLocker _(sDriverEventsLock);
 	sDriverEvents.Add(driverEvent);
-	atomic_add(&sDriverEventsPending, 1);
+
+	if(sDriverEvents.Count() == 1) {
+		release_sem(sDriverWatcherEventSemaphore);
+	}
 }
 
 
@@ -1513,13 +1515,18 @@ legacy_driver_init(void)
 	if (sDriverHash == NULL || sDriverHash->Init(DRIVER_HASH_SIZE) != B_OK)
 		return B_NO_MEMORY;
 
+	sDriverWatcherEventSemaphore = create_sem(0, "driver_event_sem");
+	ASSERT_ALWAYS(sDriverWatcherEventSemaphore >= 0);
+
 	recursive_lock_init(&sLock, "legacy driver");
 
 	new(&sDriverWatcher) DriverWatcher;
 	new(&sDriverEvents) DriverEventList;
 
-	register_kernel_daemon(&handle_driver_events, NULL, 10);
-		// once every second
+	thread_id thread = spawn_kernel_thread(handle_driver_events, "driver_events", B_LOW_PRIORITY, nullptr);
+	ASSERT_ALWAYS(thread >= 0);
+
+	resume_thread(thread);
 
 	add_debugger_command("legacy_driver", &dump_driver,
 		"info about a legacy driver entry");
