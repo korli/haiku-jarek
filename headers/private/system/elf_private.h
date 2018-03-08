@@ -13,8 +13,6 @@
 
 #include <SupportDefs.h>
 
-#include <arch_elf.h>
-
 
 // Determine the correct ELF types to use for the architecture
 
@@ -46,7 +44,6 @@ DEFINE_ELF_TYPE(Note_Thread_Entry, elf_note_thread_entry);
 #undef DEFINE_ELF_TYPE
 #undef _ELF_TYPE
 
-typedef uint16 elf_versym;
 
 #if B_HAIKU_64_BIT
 #	define ELF_CLASS	ELFCLASS64
@@ -54,5 +51,6 @@ typedef uint16 elf_versym;
 #	define ELF_CLASS	ELFCLASS32
 #endif
 
+typedef Elf_Versym elf_versym;
 
 #endif	/* _ELF_PRIVATE_H_ */
