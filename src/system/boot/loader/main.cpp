@@ -136,13 +136,13 @@ main(stage2_args *args)
 			// clone the boot_volume KMessage into kernel accessible memory
 			// note, that we need to 4 byte align the buffer and thus allocate
 			// 3 more bytes
-			void* buffer = kernel_args_malloc(gBootVolume.ContentSize() + 3);
+			void* buffer = kernel_args_malloc(gBootVolume.ContentSize() + 7);
 			if (!buffer) {
 				panic("Could not allocate memory for the boot volume kernel "
 					"arguments");
 			}
 
-			buffer = (void*)(((addr_t)buffer + 3) & ~(addr_t)0x3);
+			buffer = (void*)(((addr_t)buffer + 7) & ~(addr_t)0x7);
 			memcpy(buffer, gBootVolume.Buffer(), gBootVolume.ContentSize());
 			gKernelArgs.boot_volume = buffer;
 			gKernelArgs.boot_volume_size = gBootVolume.ContentSize();
