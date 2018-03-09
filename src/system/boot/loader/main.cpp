@@ -8,6 +8,8 @@
 #include "loader.h"
 #include "load_driver_settings.h"
 
+#include <sys/cdefs.h>
+
 #include <boot/stage2.h>
 #include <boot/vfs.h>
 #include <boot/platform.h>
@@ -154,4 +156,10 @@ main(stage2_args *args)
 out:
 	heap_release(args);
 	return 0;
+}
+
+__weak_symbol status_t platform_protect_region(void *, size_t, uint32)
+{
+	// Oh well, just use default empty implementation
+	return B_OK;
 }
