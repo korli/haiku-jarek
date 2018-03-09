@@ -56,6 +56,12 @@
 #	define __HAIKU_ARCH_ABI				"armeb"
 #	define __HAIKU_ARCH_ARM				1
 #	define __HAIKU_BIG_ENDIAN			1
+#elif __AARCH64__
+#	define __HAIKU_ARCH					aarch64
+#	define __HAIKU_ARCH_ABI				"aarch64"
+#	define __HAIKU_ARCH_AARCH64			1
+#	define __HAIKU_ARCH_BITS			64
+#   define __HAIKU_ARCH_PHYSICAL_BITS	64
 #else
 #	error Unsupported architecture!
 #endif
