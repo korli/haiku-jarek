@@ -1,0 +1,16 @@
+SubDir HAIKU_TOP src system libroot posix dlmalloc ;
+
+UsePrivateHeaders libroot shared ;
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		local architecture = $(TARGET_PACKAGING_ARCH) ;
+
+		UsePrivateSystemHeaders ;
+
+		MergeObject <$(architecture)>posix_malloc.o :
+			dlmalloc.cpp
+			;
+	}
+}
