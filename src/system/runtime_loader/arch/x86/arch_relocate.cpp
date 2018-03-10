@@ -35,7 +35,7 @@ relocate_rel(image_t *rootImage, image_t *image, Elf32_Rel *rel, int rel_len,
 
 		image_t* symbolImage = NULL;
 		if (symbolIndex != 0) {
-			const Elf32_Sym* sym = image->Symbol(symbolIndex);
+			const Elf_Sym* sym = image->Symbol(symbolIndex);
 			status_t status = resolve_symbol(rootImage, image, sym, cache, &S,
 					&symbolImage);
 			if (status < B_OK) {

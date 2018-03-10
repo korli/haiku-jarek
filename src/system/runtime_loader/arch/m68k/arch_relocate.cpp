@@ -97,16 +97,16 @@ relocate_rela(image_t *rootImage, image_t *image, Elf32_Rela *rel, int rel_len,
 			case R_68K_GLOB_DAT:
 			case R_68K_JMP_SLOT:
 			{
-				Elf32_Sym *sym;
+				const Elf32_Sym *sym;
 				status_t status;
-				sym = SYMBOL(image, ELF32_R_SYM(rel[i].r_info));
+				sym = image->Symbol(ELF32_R_SYM(rel[i].r_info));
 
 				status = resolve_symbol(rootImage, image, sym, cache, &S);
 				if (status < B_OK) {
 					TRACE(("resolve symbol \"%s\" returned: %ld\n",
-						SYMNAME(image, sym), status));
+						image->SymbolName(sym), status));
 					printf("resolve symbol \"%s\" returned: %ld\n",
-						SYMNAME(image, sym), status);
+						image->SymbolName(sym), status);
 					return status;
 				}
 			}
