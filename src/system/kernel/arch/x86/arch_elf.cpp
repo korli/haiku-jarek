@@ -243,6 +243,7 @@ arch_elf_relocate_rela(struct elf_image_info *image,
 
 		// Address of the relocation.
 		Elf64_Addr relocAddr = image->regions[0].delta + rel[i].r_offset;
+		bool relocIs32Bit = false;
 
 		// Calculate the relocation value.
 		Elf64_Addr relocValue;
@@ -253,9 +254,12 @@ arch_elf_relocate_rela(struct elf_image_info *image,
 				relocValue = symAddr + rel[i].r_addend;
 				break;
 			case R_X86_64_PC32:
-				relocValue = symAddr + rel[i].r_addend - rel[i].r_offset;
+				relocValue = (Elf32_Addr)(symAddr + rel[i].r_addend - relocAddr);
+				relocIs32Bit = true;
 				break;
 			case R_X86_64_GLOB_DAT:
+				relocValue = symAddr;
+				break;
 			case R_X86_64_JMP_SLOT:
 				relocValue = symAddr + rel[i].r_addend;
 				break;
@@ -268,7 +272,11 @@ arch_elf_relocate_rela(struct elf_image_info *image,
 				return B_BAD_DATA;
 		}
 #ifdef _BOOT_MODE
-		boot_elf64_set_relocation(relocAddr, relocValue);
+		if(!relocIs32Bit) {
+			boot_elf64_set_relocation(relocAddr, relocValue);
+		} else {
+			boot_elf32_set_relocation(relocAddr, relocValue);
+		}
 #else
 		if (!is_in_image(image, relocAddr)) {
 			dprintf("arch_elf_relocate_rela: invalid offset %#lx\n",
@@ -276,7 +284,11 @@ arch_elf_relocate_rela(struct elf_image_info *image,
 			return B_BAD_ADDRESS;
 		}
 
-		*(Elf64_Addr *)relocAddr = relocValue;
+		if(!relocIs32Bit) {
+			*(Elf64_Addr *)relocAddr = relocValue;
+		} else {
+			*(Elf32_Addr *)relocAddr = (Elf32_Addr)relocValue;
+		}
 #endif
 	}
 
