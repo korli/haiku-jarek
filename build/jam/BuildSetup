@@ -191,6 +191,7 @@ switch $(HOST_GCC_MACHINE) {
 	case x86_64-*	: HAIKU_HOST_IS_BIG_ENDIAN = 0 ;
 
 	# the following are rather unlikely as hosts ...
+	case aarch64-*		: HAIKU_HOST_IS_BIG_ENDIAN = 0 ;
 	case arm-*		: HAIKU_HOST_IS_BIG_ENDIAN = 0 ;
 	case armv7l-*	: HAIKU_HOST_IS_BIG_ENDIAN = 0 ;
 	case armv7hl-*	: HAIKU_HOST_IS_BIG_ENDIAN = 0 ;
