@@ -227,8 +227,8 @@ ColorPreview::SetMode(bool rectangle)
 void
 ColorPreview::_DragColor(BPoint where)
 {
-	char hexString[7];
-	sprintf(hexString, "#%.2X%.2X%.2X", fColor.red, fColor.green, fColor.blue);
+	char hexString[16];
+	snprintf(hexString, sizeof(hexString), "#%.2X%.2X%.2X", fColor.red, fColor.green, fColor.blue);
 
 	BMessage message(B_PASTE);
 	message.AddData("text/plain", B_MIME_TYPE, &hexString, sizeof(hexString));
