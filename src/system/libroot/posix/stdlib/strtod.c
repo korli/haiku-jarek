@@ -127,7 +127,7 @@
     defined(__sparc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
     defined(__m68k__) || defined(__M68K__) || defined(__arm__) || \
     defined(__ARM__) || defined(__mipsel__) || defined(__MIPSEL__) || \
-    defined(__x86_64__)
+    defined(__x86_64__) || defined(__AARCH64__)
 #	include <sys/types.h>
 #	if BYTE_ORDER == BIG_ENDIAN
 #		define IEEE_BIG_ENDIAN
