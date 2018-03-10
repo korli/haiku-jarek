@@ -56,6 +56,14 @@ arm-*)
 	gdbConfigureArgs="--disable-multilib --disable-werror -enable-interwork"
 	gdbTarget="arm-unknown-elf"
 	;;
+aarch64-*)
+	# Multilib creates a lot of confusion as the wrong libs end up being linked.
+	# For now, target Cortex-A8 devices.
+	binutilsConfigureArgs="--disable-multilib"
+	gccConfigureArgs="--disable-multilib"
+	gdbConfigureArgs="--disable-multilib"
+	gdbTarget="aarch64-unknown-elf"
+	;;
 powerpc-*)
 	binutilsConfigureArgs="--disable-multilib"
 	gccConfigureArgs="--disable-multilib"
