@@ -1,0 +1,12 @@
+SubDir HAIKU_TOP src add-ons kernel bus_managers isa arch aarch64 ;
+
+SubDirHdrs [ FDirName $(SUBDIR) $(DOTDOT) $(DOTDOT) ] ;
+
+UsePrivateHeaders kernel [ FDirName kernel arch aarch64 ] ;
+UsePrivateHeaders [ FDirName kernel boot platform $(TARGET_BOOT_PLATFORM) ] ;
+
+KernelStaticLibrary isa_arch_bus_manager : 
+	isa_dma.c
+	isa_controller.c
+	;
+
