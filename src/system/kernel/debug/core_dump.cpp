@@ -1097,38 +1097,15 @@ private:
 		header.e_ident[EI_MAG1] = ELFMAG[1];
 		header.e_ident[EI_MAG2] = ELFMAG[2];
 		header.e_ident[EI_MAG3] = ELFMAG[3];
-#ifdef B_HAIKU_64_BIT
-		header.e_ident[EI_CLASS] = ELFCLASS64;
-#else
-		header.e_ident[EI_CLASS] = ELFCLASS32;
-#endif
-#if B_HOST_IS_LENDIAN
+		header.e_ident[EI_CLASS] = ELF_TARG_CLASS;
 		header.e_ident[EI_DATA] = ELFDATA2LSB;
-#else
-		header.e_ident[EI_DATA] = ELFDATA2MSB;
-#endif
-		header.e_ident[EI_VERSION] = EV_CURRENT;
+		header.e_ident[EI_VERSION] = ELF_TARG_VER;
 
 		// e_type
 		header.e_type = ET_CORE;
 
 		// e_machine
-#if defined(__HAIKU_ARCH_X86)
-		header.e_machine = EM_386;
-#elif defined(__HAIKU_ARCH_X86_64)
-		header.e_machine = EM_X86_64;
-#elif defined(__HAIKU_ARCH_PPC)
-		header.e_machine = EM_PPC64;
-#elif defined(__HAIKU_ARCH_M68K)
-		header.e_machine = EM_68K;
-#elif defined(__HAIKU_ARCH_MIPSEL)
-		header.e_machine = EM_MIPS;
-#elif defined(__HAIKU_ARCH_ARM)
-		header.e_machine = EM_ARM;
-#else
-#	error Unsupported architecture!
-#endif
-
+		header.e_machine = ELF_TARG_MACH;
 		header.e_version = EV_CURRENT;
 		header.e_entry = 0;
 		header.e_phoff = sizeof(header);
