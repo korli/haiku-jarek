@@ -28,7 +28,7 @@ private:
 
 	char    fServer[256];
 	char    fQueue[256];
-	char    fFile[256];
+	char    fFile[300];
 	char    fUser[256];
 	int32   fJobId;
 	fstream fStream;
