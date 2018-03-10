@@ -6,8 +6,6 @@
 
 #include "pci_io.h"
 #include "pci_private.h"
-#warning ARM:WRITEME
-
 
 status_t
 pci_io_init()

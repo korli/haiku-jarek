@@ -14,8 +14,6 @@
 status_t
 pci_controller_init(void)
 {
-	/* no support yet */
-#warning ARM:WRITEME
 	return B_OK;
 }
 
