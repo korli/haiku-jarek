@@ -24,13 +24,14 @@ for architectureObject in [ MultiArchSubDirSetup x86_64 ] {
 			system_time.cpp
 			thread.cpp
 			time.cpp
-			tls.cpp
+			arch_tls.cpp
 
 			# sources from x86_common
 			stack_trace.cpp
 
 			# sources from generic
 			generic_atomic.cpp
+			generic_tls.cpp
 			;
 	}
 }

@@ -5,6 +5,7 @@
 
 
 #include "runtime_loader_private.h"
+#include "elf_tls.h"
 
 #include <runtime_loader.h>
 
@@ -106,4 +107,29 @@ arch_relocate_image(image_t* rootImage, image_t* image,
 	}
 
 	return B_OK;
+}
+
+void allocate_initial_tls()
+{
+    /*
+     * Fix the size of the static TLS block by using the maximum
+     * offset allocated so far and adding a bit for dynamic modules to
+     * use.
+     */
+	TLSState::tls_static_space = TLSState::tls_last_offset + RTLD_STATIC_TLS_EXTRA;
+
+	void * tls = allocate_tls(0, 3*sizeof(Elf_Addr), sizeof(Elf_Addr));
+	assert(tls);
+
+	// Update pointer set by kernel
+	__asm__ __volatile__("movq %0, %%fs:0" :: "r"(segbase));
+}
+
+void *__tls_get_addr(tls_index *ti)
+{
+    Elf_Addr** segbase;
+
+    __asm __volatile("movq %%fs:0, %0" : "=r" (segbase));
+
+    return tls_get_addr_common(&segbase[1], ti->ti_module, ti->ti_offset);
 }

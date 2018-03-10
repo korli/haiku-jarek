@@ -56,8 +56,9 @@ struct rld_export gRuntimeLoader = {
 	test_executable,
 	get_executable_architecture,
 	get_next_image_dependency,
-	get_tls_address,
-	destroy_thread_tls,
+	_rtld_allocate_tls,
+	_rtld_free_tls,
+	(void *(*)(void*))__tls_get_addr,
 
 	elf_reinit_after_fork,
 	NULL, // call_atexit_hooks_for_range

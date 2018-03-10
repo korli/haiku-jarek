@@ -17,7 +17,10 @@ for architectureObject in [ MultiArchSubDirSetup x86 x86_gcc2 ] {
 			;
 		}
 
-		SEARCH_SOURCE += [ FDirName $(SUBDIR) $(DOTDOT) x86_common ] ;
+		SEARCH_SOURCE +=
+			[ FDirName $(SUBDIR) $(DOTDOT) generic ]
+			[ FDirName $(SUBDIR) $(DOTDOT) x86_common ]
+			;
 
 		MergeObject <$(architecture)>os_arch_$(TARGET_ARCH).o :
 			atomic.S
@@ -33,6 +36,9 @@ for architectureObject in [ MultiArchSubDirSetup x86 x86_gcc2 ] {
 
 			# sources from x86_common
 			stack_trace.cpp
+			
+			# sources from generic
+			generic_tls.cpp
 			;
 	}
 }

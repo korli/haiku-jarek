@@ -10,6 +10,8 @@
 #	define _NO_INLINE_ASM 1
 #endif
 
+#include <sys/cdefs.h>
+
 #include <runtime_loader/runtime_loader.h>
 
 #include "support/TLS.h"
@@ -28,9 +30,9 @@ void* ___tls_get_addr(struct tls_index* ti) __attribute__((__regparm__(1)));
 
 #endif	// GCC2
 
+#ifndef _Thread_local
 
 static int32 gNextSlot = TLS_FIRST_FREE_SLOT;
-
 
 int32
 tls_allocate(void)
@@ -74,6 +76,7 @@ tls_set(int32 index, void *value)
 		: : "r" (index), "r" (value));
 }
 
+#endif
 
 #if !defined(__GNUC__) || (__GNUC__ > 2)
 
@@ -81,7 +84,7 @@ tls_set(int32 index, void *value)
 void* __attribute__((__regparm__(1)))
 ___tls_get_addr(struct tls_index* ti)
 {
-	return __gRuntimeLoader->get_tls_address(ti->module, ti->offset);
+	return __gRuntimeLoader->__tls_get_addr(ti);
 }
 
 

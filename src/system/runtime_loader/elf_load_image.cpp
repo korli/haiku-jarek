@@ -210,10 +210,11 @@ parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 				// don't care
 				break;
 			case PT_TLS:
-				image->dso_tls_id
-					= TLSBlockTemplates::Get().Register(
-						TLSBlockTemplate((void*)pheader->p_vaddr,
-							pheader->p_filesz, pheader->p_memsz));
+				image->tlsindex = 1;
+				image->tlssize = pheader->p_memsz;
+				image->tlsalign = pheader->p_align;
+				image->tlsinitsize = pheader->p_filesz;
+				image->tlsinit = (void *)(pheader->p_vaddr + image->regions[0].delta);
 				break;
 			default:
 				FATAL("%s: Unhandled pheader type in parse 0x%lx\n",

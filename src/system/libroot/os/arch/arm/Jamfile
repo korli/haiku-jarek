@@ -23,6 +23,7 @@ for architectureObject in [ MultiArchSubDirSetup arm ] {
 
 			generic_atomic.cpp
 			generic_system_time_nsecs.cpp
+			generic_tls.cpp
 			;
 	}
 }

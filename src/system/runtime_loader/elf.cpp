@@ -52,15 +52,13 @@ static uint32 sPreloadedImageCount = 0;
 static recursive_lock sLock = RECURSIVE_LOCK_INITIALIZER(kLockName);
 
 
-static inline void
-rld_lock()
+void rld_lock()
 {
 	recursive_lock_lock(&sLock);
 }
 
 
-static inline void
-rld_unlock()
+void rld_unlock()
 {
 	recursive_lock_unlock(&sLock);
 }
@@ -447,6 +445,9 @@ load_program(char const *path, void **_entry)
 	if (status < B_OK)
 		goto err;
 
+	// Allocate initial TLS offsets for all the images
+	for_each_image((void (*)(image_t *, void *))allocate_tls_offset, NULL);
+
 	// Set RTLD_GLOBAL on all libraries including the program.
 	// This results in the desired symbol resolution for dlopen()ed libraries.
 	set_image_flags_recursively(gProgramImage, RTLD_GLOBAL);
@@ -454,6 +455,9 @@ load_program(char const *path, void **_entry)
 	status = relocate_dependencies(gProgramImage);
 	if (status < B_OK)
 		goto err;
+
+	// Allocate initial TLS space
+	allocate_initial_tls();
 
 	inject_runtime_loader_api(gProgramImage);
 
@@ -667,7 +671,9 @@ unload_library(void* handle, image_id imageID, bool addOn)
 			if (image->term_routine)
 				((init_term_function)image->term_routine)(image->id);
 
-			TLSBlockTemplates::Get().Unregister(image->dso_tls_id);
+			if(image->tls_done) {
+				free_tls_offset(image);
+			}
 
 			dequeue_disposable_image(image);
 			unmap_image(image);
@@ -1021,8 +1027,8 @@ int dl_iterate_phdr(__dl_iterate_hdr_callback callback, void * arg)
 			ph_info.dlpi_phnum = image->program_headers_count;
 			ph_info.dlpi_adds = image->ref_count;
 			ph_info.dlpi_subs = 0;
-			ph_info.dlpi_tls_modid = image->dso_tls_id;
-			ph_info.dlpi_tls_data = get_tls_address(image->dso_tls_id, 0);
+			ph_info.dlpi_tls_modid = image->tlsindex;
+			ph_info.dlpi_tls_data = image->tlsinit;
 
 			atomic_add(&image->ref_count, 1);
 			rld_unlock();

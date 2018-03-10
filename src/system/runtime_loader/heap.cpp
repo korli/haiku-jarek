@@ -13,6 +13,7 @@
 #endif
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <algorithm>
 
@@ -425,4 +426,31 @@ free(void* allocated)
 
 	sFreeChunkTree.Insert(freedChunk);
 	sAvailable += freedChunk->Size();
+}
+
+void * malloc_aligned(size_t size, size_t align)
+{
+	void *mem, *res;
+
+	if (align < sizeof(void *))
+		align = sizeof(void *);
+
+	mem = malloc(size + sizeof(void *) + align - 1);
+	assert(mem);
+	res = (void *)round((uintptr_t)mem + sizeof(void *), align);
+	*(void **)((uintptr_t)res - sizeof(void *)) = mem;
+	return (res);
+}
+
+void free_aligned(void *ptr)
+{
+	void *mem;
+	uintptr_t x;
+
+	if (ptr == NULL)
+		return;
+	x = (uintptr_t)ptr;
+	x -= sizeof(void *);
+	mem = *(void **)x;
+	free(mem);
 }

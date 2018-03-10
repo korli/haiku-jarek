@@ -669,6 +669,15 @@ find_loaded_image_by_address(addr_t address)
 	return NULL;
 }
 
+image_t*
+find_loaded_image_by_tls_index(int tls_index) {
+	for (image_t* image = sLoadedImages.head; image; image = image->next) {
+		if(image->tlsindex == tls_index)
+			return image;
+	}
+
+	return NULL;
+}
 
 void
 set_image_flags_recursively(image_t* image, uint32 flags)
@@ -730,4 +739,13 @@ get_sorted_image_list(image_t* image, image_t*** _list, uint32 sortFlag)
 	}
 
 	return count;
+}
+
+void for_each_image(void (* handler)(image_t * image, void * arg), void * arg)
+{
+	for (image_t* image = sLoadedImages.head; image != NULL;
+			image = image->next)
+	{
+		handler(image, arg);
+	}
 }

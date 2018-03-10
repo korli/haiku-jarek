@@ -46,8 +46,9 @@ struct rld_export {
 		const char** _architecture);
 	status_t (*get_next_image_dependency)(image_id id, uint32 *cookie,
 		const char **_name);
-	void* (*get_tls_address)(unsigned dso, addr_t offset);
-	void (*destroy_thread_tls)();
+	void * (* allocate_tls)(void * oldtls, size_t tcbsize, size_t tcbalign);
+	void (* free_tls)(void * tcb, size_t tcbsize, size_t tcbalign);
+	void * (* __tls_get_addr)(void * tls_index);
 
 	status_t (*reinit_after_fork)();
 
@@ -148,8 +149,6 @@ typedef struct image_t {
 	Elf_Phdr 			*program_headers;
 	int					program_headers_count;
 
-	unsigned			dso_tls_id;
-
 	uint32				num_needed;
 	struct image_t		**needed;
 
@@ -161,6 +160,15 @@ typedef struct image_t {
 	elf_versym			*symbol_versions;
 	elf_version_info	*versions;
 	uint32				num_versions;
+
+    /* TLS information */
+    int tlsindex;			/* Index in DTV for this module */
+    void *tlsinit;			/* Base address of TLS init block */
+    size_t tlsinitsize;		/* Size of TLS init block for this module */
+    size_t tlssize;			/* Size of TLS block for this module */
+    size_t tlsoffset;		/* Offset of static TLS block for this module */
+    size_t tlsalign;		/* Alignment of static TLS block */
+    bool tls_done;
 
 #ifdef __cplusplus
 	const Elf_Sym*			(*find_undefined_symbol)(struct image_t* rootImage,

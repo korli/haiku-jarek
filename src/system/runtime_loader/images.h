@@ -70,6 +70,7 @@ void		dequeue_disposable_image(image_t* image);
 image_t*	find_loaded_image_by_name(char const* name, uint32 typeMask);
 image_t*	find_loaded_image_by_id(image_id id, bool ignoreDisposable);
 image_t*	find_loaded_image_by_address(addr_t address);
+image_t*	find_loaded_image_by_tls_index(int tls_index);
 
 void		set_image_flags_recursively(image_t* image, uint32 flags);
 void		clear_image_flags_recursively(image_t* image, uint32 flags);

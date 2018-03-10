@@ -9,7 +9,7 @@
 #define RUNTIME_LOADER_PRIVATE_H
 
 #include <user_runtime.h>
-#include <runtime_loader.h>
+#include <runtime_loader/runtime_loader.h>
 
 #include "tracing_config.h"
 
@@ -49,6 +49,25 @@ extern char* (*gGetEnv)(const char* name);
 extern bool gProgramLoaded;
 extern image_t* gProgramImage;
 
+#if defined(__HAIKU_ARCH_AARCH64)
+#include "arch/arch64/arch_runtime_loader.h"
+#elif defined(__HAIKU_ARCH_ARM)
+#include "arch/arm/arch_runtime_loader.h"
+#elif defined(__HAIKU_ARCH_MIPSEL)
+#include "arch/mips/arch_runtime_loader.h"
+#elif defined(__HAIKU_ARCH_M68K)
+#include "arch/m68k/arch_runtime_loader.h"
+#elif defined(__HAIKU_ARCH_PPC)
+#include "arch/ppc/arch_runtime_loader.h"
+#elif defined(__HAIKU_ARCH_RISCV)
+#include "arch/riscv/arch_runtime_loader.h"
+#elif defined(__HAIKU_ARCH_X86)
+#include "arch/x86/arch_runtime_loader.h"
+#elif defined(__HAIKU_ARCH_X86_64)
+#include "arch/x86_64/arch_runtime_loader.h"
+#else
+#error "??? Architecture not defined ???"
+#endif
 
 extern "C" {
 
@@ -91,6 +110,18 @@ status_t heap_init(void);
 // arch dependent prototypes
 status_t arch_relocate_image(image_t* rootImage, image_t* image,
 	SymbolLookupCache* cache);
+
+void rld_lock();
+void rld_unlock();
+void for_each_image(void (* handler)(image_t * image, void * arg), void * arg);
+
+void * malloc_aligned(size_t size, size_t align);
+void free_aligned(void *ptr);
+
+void * _rtld_allocate_tls(void *oldtls, size_t tcbsize, size_t tcbalign);
+void _rtld_free_tls(void *tcb, size_t tcbsize, size_t tcbalign);
+
+#define RTLD_STATIC_TLS_EXTRA	128
 
 }
 
