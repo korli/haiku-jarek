@@ -64,6 +64,8 @@
 #include <TokenSpace.h>
 #include <ViewPrivate.h>
 
+#include <sys/cdefs.h>
+
 using std::nothrow;
 
 //#define DEBUG_BVIEW
@@ -105,6 +107,7 @@ static property_info sViewPropInfo[] = {
 
 //	#pragma mark -
 
+_Static_assert(sizeof(rgb_color) == sizeof(uint32), "rgb_color structure size must match uint32");
 
 static inline uint32
 get_uint32_color(rgb_color color)
@@ -118,8 +121,10 @@ get_uint32_color(rgb_color color)
 static inline rgb_color
 get_rgb_color(uint32 value)
 {
+	rgb_color color;
 	value = B_HOST_TO_BENDIAN_INT32(value);
-	return *(rgb_color*)&value;
+	memcpy(&color, &value, sizeof(uint32));
+	return color;
 }
 
 
