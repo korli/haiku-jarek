@@ -86,14 +86,14 @@ struct ELF32Class {
 		if (status != B_OK)
 			return status;
 
-		*_mappedAddress = (void*)*_address;
+		*_mappedAddress = (void*)(addr_t)*_address;
 		return B_OK;
 	}
 
 	static inline void*
 	Map(AddrType address)
 	{
-		return (void*)address;
+		return (void*)(addr_t)address;
 	}
 };
 
@@ -296,7 +296,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		goto error1;
 	}
 
-	image->regions[0].delta = (AddrType)mappedRegion - image->regions[0].start;
+	image->regions[0].delta = (AddrType)(addr_t)mappedRegion - image->regions[0].start;
 
 	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
 		image->regions[i].delta = image->regions[0].delta;
@@ -428,7 +428,7 @@ ELFLoader<Class>::Relocate(preloaded_image* _image)
 
 	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
 		if(image->regions[i].protection != (B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA)) {
-			platform_protect_region((void *)image->regions[i].start,
+			platform_protect_region((void *)(addr_t)image->regions[i].start,
 					image->regions[i].size,
 					image->regions[i].protection);
 		}
