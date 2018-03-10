@@ -107,6 +107,8 @@ extern status_t boot_elf_resolve_symbol(preloaded_elf64_image* image,
 	const Elf64_Sym* symbol, Elf64_Addr* symbolAddress);
 extern void boot_elf64_set_relocation(Elf64_Addr resolveAddress,
 	const Elf64_Addr finalAddress);
+extern void boot_elf32_set_relocation(Elf64_Addr resolveAddress,
+	const Elf32_Addr finalAddress);
 #endif
 
 #endif	/* KERNEL_BOOT_ELF_H */
