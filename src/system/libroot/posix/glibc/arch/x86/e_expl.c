@@ -36,7 +36,7 @@ __ieee754_expl (long double x)
    in NaN.  The ugliness results from the bright minds at Intel.
    For the i686 the code can be written better.
    -- drepper@cygnus.com.  */
-  asm ("fxam\n\t"		/* Is NaN or +-Inf?  */
+  __asm__ ("fxam\n\t"		/* Is NaN or +-Inf?  */
        "fstsw	%%ax\n\t"
        "movb	$0x45, %%dh\n\t"
        "andb	%%ah, %%dh\n\t"

@@ -12,7 +12,7 @@ __atanl (long double x)
 {
   long double res;
 
-  asm ("fld1\n"
+  __asm__ ("fld1\n"
        "fpatan"
        : "=t" (res) : "0" (x));
 

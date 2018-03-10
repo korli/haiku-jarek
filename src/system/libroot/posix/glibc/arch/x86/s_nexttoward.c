@@ -86,7 +86,7 @@ static char rcsid[] = "$NetBSD: $";
 	if(hy>=0x7ff00000) {
 	  x = x+x;	/* overflow  */
 	  /* Force conversion to double.  */
-	  asm ("" : "=m"(x) : "m"(x));
+	  __asm__ ("" : "=m"(x) : "m"(x));
 	  return x;
 	}
 	if(hy<0x00100000) {		/* underflow */

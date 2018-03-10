@@ -226,10 +226,10 @@
 /* We want the .gnu.warning.SYMBOL section to be unallocated.  */
 #  ifdef HAVE_ASM_PREVIOUS_DIRECTIVE
 #   define __make_section_unallocated(section_string)	\
-  asm (".section " section_string "\n\t.previous");
+  __asm__ (".section " section_string "\n\t.previous");
 #  elif defined HAVE_ASM_POPSECTION_DIRECTIVE
 #   define __make_section_unallocated(section_string)	\
-  asm (".pushsection " section_string "\n\t.popsection");
+  __asm__ (".pushsection " section_string "\n\t.popsection");
 #  else
 #   define __make_section_unallocated(section_string)
 #  endif
@@ -260,7 +260,7 @@
 #   define link_warning(symbol, msg)
 #  else
 #   define link_warning(symbol, msg)		\
-     asm (".stabs \"" msg "\",30,0,0,0\n\t"	\
+     __asm__ (".stabs \"" msg "\",30,0,0,0\n\t"	\
           ".stabs \"" __SYMBOL_PREFIX #symbol "\",1,0,0,0\n");
 #  endif /* XCOFF */
 #  define libc_freeres_ptr(decl) decl

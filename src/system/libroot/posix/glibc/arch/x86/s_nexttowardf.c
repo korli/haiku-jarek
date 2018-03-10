@@ -70,7 +70,7 @@ static char rcsid[] = "$NetBSD: $";
 	if(hy>=0x7f800000) {
 	  x = x+x;	/* overflow  */
 	  /* Force conversion to float.  */
-	  asm ("" : "=m"(x) : "m"(x));
+	  __asm__ ("" : "=m"(x) : "m"(x));
 	  return x;
 	}
 	if(hy<0x00800000) {		/* underflow */

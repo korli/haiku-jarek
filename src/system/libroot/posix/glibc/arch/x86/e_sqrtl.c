@@ -12,7 +12,7 @@ __ieee754_sqrtl (long double x)
 {
   long double res;
 
-  asm ("fsqrt" : "=t" (res) : "0" (x));
+  __asm__ ("fsqrt" : "=t" (res) : "0" (x));
 
   return res;
 }

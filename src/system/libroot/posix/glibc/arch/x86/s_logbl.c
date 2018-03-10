@@ -11,7 +11,7 @@ __logbl (long double x)
 {
   long double res;
 
-  asm ("fxtract\n"
+  __asm__ ("fxtract\n"
        "fstp	%%st" : "=t" (res) : "0" (x));
   return res;
 }

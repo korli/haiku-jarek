@@ -183,7 +183,7 @@ static const mp_limb_t _tens_in_limb[MAX_DIG_PER_LIMB + 1] =
 #ifndef	howmany
 #define	howmany(x,y)		(((x)+((y)-1))/(y))
 #endif
-#define SWAP(x, y)		({ typeof(x) _tmp = x; x = y; y = _tmp; })
+#define SWAP(x, y)		({ __typeof__(x) _tmp = x; x = y; y = _tmp; })
 
 #define NDIG			(MAX_10_EXP - MIN_10_EXP + 2 * MANT_DIG)
 #define HEXNDIG			((MAX_EXP - MIN_EXP + 7) / 8 + 2 * MANT_DIG)

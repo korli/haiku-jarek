@@ -61,7 +61,7 @@ static char rcsid[] = "$NetBSD: s_nextafterf.c,v 1.4 1995/05/10 20:48:01 jtc Exp
 	if(hy>=0x7f800000) {
 	  x = x+x;	/* overflow  */
 	  if (FLT_EVAL_METHOD != 0)
-	    asm ("" : "=m"(x) : "m"(x));
+	    __asm__ ("" : "=m"(x) : "m"(x));
 	  return x;	/* overflow  */
 	}
 	if(hy<0x00800000) {		/* underflow */

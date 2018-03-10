@@ -11,7 +11,7 @@ __rintl (long double x)
 {
   long double res;
 
-  asm ("frndint" : "=t" (res) : "0" (x));
+  __asm__ ("frndint" : "=t" (res) : "0" (x));
   return res;
 }
 
