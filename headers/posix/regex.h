@@ -353,6 +353,9 @@ typedef enum
 # define __REPB_PREFIX(name) __##name
 #endif
 
+// This is redefined by sys/cdefs.h
+#undef __used
+
 struct re_pattern_buffer
 {
   /* Space that holds the compiled pattern.  It is declared as
