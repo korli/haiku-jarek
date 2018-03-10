@@ -22,7 +22,7 @@
  */
 
 
-#define HIDDEN_FUNCTION(function)   asm volatile(".hidden " #function)
+#define HIDDEN_FUNCTION(function)   __asm__ __volatile__(".hidden " #function)
 
 
 void
