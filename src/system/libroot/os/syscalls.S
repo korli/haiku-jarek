@@ -25,6 +25,9 @@
 #ifdef ARCH_m68k
 #	include "arch/m68k/syscalls.inc"
 #endif
+#ifdef ARCH_aarch64
+#	include "arch/aarch64/syscalls.inc"
+#endif
 
 /* include the auto-generated file syscalls file */
 #include "syscalls.S.inc"
