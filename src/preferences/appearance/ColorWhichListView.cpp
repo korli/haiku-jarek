@@ -52,8 +52,8 @@ ColorWhichListView::InitiateDrag(BPoint where, int32 index, bool wasSelected)
 
 	rgb_color color = colorWhichItem->Color();
 
-	char hexString[7];
-	sprintf(hexString, "#%.2X%.2X%.2X", color.red, color.green, color.blue);
+	char hexString[16];
+	snprintf(hexString, sizeof(hexString), "#%.2X%.2X%.2X", color.red, color.green, color.blue);
 
 	BMessage message(B_PASTE);
 	message.AddData("text/plain", B_MIME_TYPE, &hexString, sizeof(hexString));
