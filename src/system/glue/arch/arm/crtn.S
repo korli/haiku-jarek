@@ -1,19 +1,12 @@
 /*
- * Copyright 2005, Axel Dörfler, axeld@pinc-software.de.
+ * Copyright 2017 Jaroslaw Pelczar <jarek@jpelczar.com>
  * Distributed under the terms of the MIT License.
  */
 
-/**	This file contains the final part of the ".init" and ".fini" sections in
- *	the ELF executable. It is tightly connected to crti.S.
- *	Have a look at crti.S to find a description of what happens here.
- */
-
 .section .init
-	// the image ID and program args are still on the stack
-	bl	__haiku_init_after
-
+	pop	{r0, r1, r4, r5, r6, r7, r8, r9, r10, r11, r12, r14}
+	b	__haiku_init_after
 
 .section .fini
-	// the image ID and program args are still on the stack
-	bl	__haiku_term_after
-
+	pop	{r0, r1, r4, r5, r6, r7, r8, r9, r10, r11, r12, r14}
+	b	__haiku_term_after
