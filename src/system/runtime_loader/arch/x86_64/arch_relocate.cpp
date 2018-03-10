@@ -47,13 +47,17 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 			case R_X86_64_NONE:
 				continue;
 			case R_X86_64_64:
+				relocValue = symAddr + rel[i].r_addend;
+				break;
 			case R_X86_64_GLOB_DAT:
+				relocValue = symAddr;
+				break;
 			case R_X86_64_JMP_SLOT:
 				relocValue = symAddr + rel[i].r_addend;
 				break;
 			case R_X86_64_PC32:
-				relocValue = symAddr + rel[i].r_addend - rel[i].r_offset;
-				break;
+				*(Elf32_Addr *)relocAddr = (Elf32_Addr)(symAddr + rel[i].r_addend - relocAddr);
+				continue;
 			case R_X86_64_RELATIVE:
 				relocValue = image->regions[0].delta + rel[i].r_addend;
 				break;
