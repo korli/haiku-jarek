@@ -145,7 +145,7 @@ typedef struct image_t {
     bool valid_hash_sysv;
     bool valid_hash_gnu;
 
-	Elf32_Phdr 			*program_headers;
+	Elf_Phdr 			*program_headers;
 	int					program_headers_count;
 
 	unsigned			dso_tls_id;
