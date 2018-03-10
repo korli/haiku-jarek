@@ -28,7 +28,7 @@ public:
 private:
 	char    __url[256];
 	char    __user[256];
-	char    __file[256];
+	char    __file[300];
 	int32   __jobid;
 	bool    __error;
 	fstream __fs;

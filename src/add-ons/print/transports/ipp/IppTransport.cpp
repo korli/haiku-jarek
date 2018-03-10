@@ -65,7 +65,7 @@ IppTransport::IppTransport(BMessage *msg)
 		else
 			strcpy(__user, "baron");
 
-		sprintf(__file, "%s/%s@ipp.%" B_PRId32, spool_path, __user, __jobid);
+		snprintf(__file, sizeof(__file), "%s/%s@ipp.%" B_PRId32, spool_path, __user, __jobid);
 
 		__fs.open(__file, ios::in | ios::out | ios::binary | ios::trunc);
 		if (__fs.good()) {
