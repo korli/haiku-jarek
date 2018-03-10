@@ -20,20 +20,20 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 	for (size_t i = 0; i < relLength / sizeof(Elf64_Rela); i++) {
 		int type = ELF64_R_TYPE(rel[i].r_info);
 		int symIndex = ELF64_R_SYM(rel[i].r_info);
-		Elf64_Addr symAddr = 0;
+		addr_t symAddr = 0;
 		image_t* symbolImage = NULL;
 
 		// Resolve the symbol, if any.
 		if (symIndex != 0) {
-			Elf64_Sym* sym = SYMBOL(image, symIndex);
+			const Elf_Sym* sym = image->Symbol(symIndex);
 
 			status_t status = resolve_symbol(rootImage, image, sym, cache,
 				&symAddr, &symbolImage);
 			if (status != B_OK) {
 				TRACE(("resolve symbol \"%s\" returned: %" B_PRId32 "\n",
-					SYMNAME(image, sym), status));
+					image->SymbolName(sym), status));
 				printf("resolve symbol \"%s\" returned: %" B_PRId32 "\n",
-					SYMNAME(image, sym), status);
+					image->SymbolName(sym), status);
 				return status;
 			}
 		}
@@ -48,7 +48,7 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 				continue;
 			case R_X86_64_64:
 			case R_X86_64_GLOB_DAT:
-			case R_X86_64_JUMP_SLOT:
+			case R_X86_64_JMP_SLOT:
 				relocValue = symAddr + rel[i].r_addend;
 				break;
 			case R_X86_64_PC32:
