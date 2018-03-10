@@ -777,4 +777,11 @@ boot_elf64_set_relocation(Elf64_Addr resolveAddress, Elf64_Addr finalAddress)
 	Elf64_Addr* dest = (Elf64_Addr*)ELF64Class::Map(resolveAddress);
 	*dest = finalAddress;
 }
+
+void
+boot_elf32_set_relocation(Elf64_Addr resolveAddress, Elf32_Addr finalAddress)
+{
+	Elf32_Addr* dest = (Elf32_Addr*)ELF64Class::Map(resolveAddress);
+	*dest = finalAddress;
+}
 #endif
