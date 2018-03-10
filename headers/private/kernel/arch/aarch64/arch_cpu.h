@@ -129,13 +129,19 @@ struct iframe {
 	uint64			x[30];
 };
 
+#ifdef __cplusplus
 namespace BKernel {
 	struct Thread;
 }  // namespace BKernel
+#endif
 
 typedef struct arch_cpu_info {
 	uint32						mpidr;
+#ifdef __cplusplus
 	BKernel::Thread *			last_vfp_user;
+#else
+	void *						last_vfp_user;
+#endif
 } arch_cpu_info;
 
 #ifdef __cplusplus
@@ -151,6 +157,9 @@ static inline void arch_cpu_idle(void)
 {
 	aarch64_yield();
 }
+
+void __aarch64_setup_system_time(uint64 conversionFactor,
+	uint64 conversionFactorNsecs);
 
 #ifdef __cplusplus
 }
