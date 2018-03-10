@@ -274,8 +274,8 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		RegionType* region = &image->regions[regionIndex];
 		++regionIndex;
 
-		region->start = ROUNDDOWN(header.p_vaddr, B_PAGE_SIZE);
-		region->size = ROUNDUP(header.p_memsz + header.p_vaddr, B_PAGE_SIZE) - region->start;
+		region->start = header.p_vaddr & ~AddrType(B_PAGE_SIZE - 1);
+		region->size = ((header.p_memsz + header.p_vaddr + B_PAGE_SIZE - 1) & ~AddrType(B_PAGE_SIZE - 1)) - region->start;
 		region->delta = 0;
 		region->protection = B_KERNEL_READ_AREA |
 					(header.p_flags & PF_W ? B_KERNEL_WRITE_AREA : 0) |
@@ -296,7 +296,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		goto error1;
 	}
 
-	image->regions[0].delta = (addr_t)mappedRegion - image->regions[0].start;
+	image->regions[0].delta = (AddrType)mappedRegion - image->regions[0].start;
 
 	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
 		image->regions[i].delta = image->regions[0].delta;
