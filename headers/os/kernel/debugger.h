@@ -18,7 +18,7 @@
 #include <arch/m68k/arch_debugger.h>
 #include <arch/mipsel/arch_debugger.h>
 #include <arch/arm/arch_debugger.h>
-
+#include <arch/aarch64/arch_debugger.h>
 
 #ifdef __x86_64__
 	typedef struct x86_64_debug_cpu_state debug_cpu_state;
@@ -32,6 +32,8 @@
 	typedef struct mipsel_debug_cpu_state debug_cpu_state;
 #elif __ARM__
 	typedef struct arm_debug_cpu_state debug_cpu_state;
+#elif __AARCH64__
+	typedef struct aarch64_debug_cpu_state debug_cpu_state;
 #else
 	#error unsupported architecture
 #endif
