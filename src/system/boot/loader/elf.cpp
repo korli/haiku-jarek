@@ -281,10 +281,10 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 					(header.p_flags & PF_W ? B_KERNEL_WRITE_AREA : 0) |
 					(header.p_flags & PF_X ? B_KERNEL_EXECUTE_AREA : 0);
 
-		TRACE(("segment %ld: start = 0x%llx, size = %llu, delta = %llx, prot = %x\n", i,
+		TRACE(("segment %" B_PRId32 ": start = %" B_PRIx64 ", size = %" B_PRIx64 ", delta = %" B_PRIx64 ", prot = %" B_PRIx32 "\n", i,
 			(uint64)region->start, (uint64)region->size,
-			(int64)(AddrType)region->delta,
-			region->protection));
+			(uint64)(AddrType)region->delta,
+			(uint32)region->protection));
 	}
 
 	base_vaddr = image->regions[0].start;
@@ -302,7 +302,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		image->regions[i].delta = image->regions[0].delta;
 		image->regions[i].start += image->regions[0].delta;
 
-		TRACE(("#%02d: start 0x%llx, size 0x%llx, delta 0x%llx\n",
+		TRACE(("#%02" B_PRIu32 ": start 0x%" B_PRIx64 ", size 0x%" B_PRIx64 ", delta 0x%" B_PRIx64 "\n",
 			i,
 			(uint64)image->regions[i].start, (uint64)image->regions[i].size,
 			(int64)(AddrType)image->regions[i].delta));
