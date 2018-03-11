@@ -296,7 +296,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		goto error1;
 	}
 
-	image->regions[0].delta = (AddrType)(addr_t)mappedRegion - image->regions[0].start;
+	image->regions[0].delta = base_vaddr - image->regions[0].start;
 
 	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
 		image->regions[i].delta = image->regions[0].delta;
