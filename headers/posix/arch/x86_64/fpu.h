@@ -45,26 +45,26 @@
 
 /* Environment information of floating point unit. */
 struct env87 {
-	int32_t		en_cw;		/* control word (16bits) */
-	int32_t		en_sw;		/* status word (16bits) */
-	int32_t		en_tw;		/* tag word (16bits) */
-	int32_t		en_fip;		/* fp instruction pointer */
-	uint16_t	en_fcs;		/* fp code segment selector */
-	uint16_t	en_opcode;	/* opcode last executed (11 bits) */
-	int32_t		en_foo;		/* fp operand offset */
-	int32_t		en_fos;		/* fp operand segment selector */
+	__haiku_std_int32		en_cw;		/* control word (16bits) */
+	__haiku_std_int32		en_sw;		/* status word (16bits) */
+	__haiku_std_int32		en_tw;		/* tag word (16bits) */
+	__haiku_std_int32		en_fip;		/* fp instruction pointer */
+	__haiku_std_uint16	en_fcs;		/* fp code segment selector */
+	__haiku_std_uint16	en_opcode;	/* opcode last executed (11 bits) */
+	__haiku_std_int32		en_foo;		/* fp operand offset */
+	__haiku_std_int32		en_fos;		/* fp operand segment selector */
 };
 
 /* Contents of each x87 floating point accumulator. */
 struct fpacc87 {
-	uint8_t		fp_bytes[10];
+	__haiku_std_uint8		fp_bytes[10];
 };
 
 /* Floating point context. (i386 fnsave/frstor) */
 struct save87 {
 	struct env87	sv_env;		/* floating point control/status */
 	struct fpacc87	sv_ac[8];	/* accumulator contents, 0-7 */
-	uint8_t		sv_pad0[4];	/* saved status word (now unused) */
+	__haiku_std_uint8		sv_pad0[4];	/* saved status word (now unused) */
 	/*
 	 * Bogus padding for emulators.  Emulators should use their own
 	 * struct and arrange to store into this struct (ending here)
@@ -73,21 +73,21 @@ struct save87 {
 	 * knowing how much padding to leave.  Leave just enough for the
 	 * GPL emulator's i387_union (176 bytes total).
 	 */
-	uint8_t		sv_pad[64];	/* padding; used by emulators */
+	__haiku_std_uint8		sv_pad[64];	/* padding; used by emulators */
 };
 
 /* Contents of each SSE extended accumulator. */
 struct xmmacc {
-	uint8_t		xmm_bytes[16];
+	__haiku_std_uint8		xmm_bytes[16];
 };
 
 /* Contents of the upper 16 bytes of each AVX extended accumulator. */
 struct ymmacc {
-	uint8_t		ymm_bytes[16];
+	__haiku_std_uint8		ymm_bytes[16];
 };
 
 /* Rename structs below depending on machine architecture. */
-#ifdef __i386__
+#ifdef __HAIKU_ARCH_X86
 #define	__envxmm32	envxmm
 #else
 #define	__envxmm32	envxmm32
@@ -95,30 +95,30 @@ struct ymmacc {
 #endif
 
 struct __envxmm32 {
-	uint16_t	en_cw;		/* control word (16bits) */
-	uint16_t	en_sw;		/* status word (16bits) */
-	uint16_t	en_tw;		/* tag word (16bits) */
-	uint16_t	en_opcode;	/* opcode last executed (11 bits) */
-	uint32_t	en_fip;		/* fp instruction pointer */
-	uint16_t	en_fcs;		/* fp code segment selector */
-	uint16_t	en_pad0;	/* padding */
-	uint32_t	en_foo;		/* fp operand offset */
-	uint16_t	en_fos;		/* fp operand segment selector */
-	uint16_t	en_pad1;	/* padding */
-	uint32_t	en_mxcsr;	/* SSE control/status register */
-	uint32_t	en_mxcsr_mask;	/* valid bits in mxcsr */
+	__haiku_std_uint16	en_cw;		/* control word (16bits) */
+	__haiku_std_uint16	en_sw;		/* status word (16bits) */
+	__haiku_std_uint16	en_tw;		/* tag word (16bits) */
+	__haiku_std_uint16	en_opcode;	/* opcode last executed (11 bits) */
+	__haiku_std_uint32	en_fip;		/* fp instruction pointer */
+	__haiku_std_uint16	en_fcs;		/* fp code segment selector */
+	__haiku_std_uint16	en_pad0;	/* padding */
+	__haiku_std_uint32	en_foo;		/* fp operand offset */
+	__haiku_std_uint16	en_fos;		/* fp operand segment selector */
+	__haiku_std_uint16	en_pad1;	/* padding */
+	__haiku_std_uint32	en_mxcsr;	/* SSE control/status register */
+	__haiku_std_uint32	en_mxcsr_mask;	/* valid bits in mxcsr */
 };
 
 struct __envxmm64 {
-	uint16_t	en_cw;		/* control word (16bits) */
-	uint16_t	en_sw;		/* status word (16bits) */
-	uint8_t		en_tw;		/* tag word (8bits) */
-	uint8_t		en_zero;
-	uint16_t	en_opcode;	/* opcode last executed (11 bits ) */
-	uint64_t	en_rip;		/* fp instruction pointer */
-	uint64_t	en_rdp;		/* fp operand pointer */
-	uint32_t	en_mxcsr;	/* SSE control/status register */
-	uint32_t	en_mxcsr_mask;	/* valid bits in mxcsr */
+	__haiku_std_uint16	en_cw;		/* control word (16bits) */
+	__haiku_std_uint16	en_sw;		/* status word (16bits) */
+	__haiku_std_uint8		en_tw;		/* tag word (8bits) */
+	__haiku_std_uint8		en_zero;
+	__haiku_std_uint16	en_opcode;	/* opcode last executed (11 bits ) */
+	__haiku_std_uint64	en_rip;		/* fp instruction pointer */
+	__haiku_std_uint64	en_rdp;		/* fp operand pointer */
+	__haiku_std_uint32	en_mxcsr;	/* SSE control/status register */
+	__haiku_std_uint32	en_mxcsr_mask;	/* valid bits in mxcsr */
 };
 
 /* Floating point context. (i386 fxsave/fxrstor) */
@@ -126,13 +126,13 @@ struct savexmm {
 	struct __envxmm32	sv_env;
 	struct {
 		struct fpacc87	fp_acc;
-		uint8_t		fp_pad[6];      /* padding */
+		__haiku_std_uint8		fp_pad[6];      /* padding */
 	} sv_fp[8];
 	struct xmmacc		sv_xmm[8];
-	uint8_t			sv_pad[224];
+	__haiku_std_uint8			sv_pad[224];
 } __aligned(16);
 
-#ifdef __i386__
+#ifdef __HAIKU_ARCH_X86
 union savefpu {
 	struct save87	sv_87;
 	struct savexmm	sv_xmm;
@@ -143,17 +143,17 @@ struct savefpu {
 	struct __envxmm64	sv_env;
 	struct {
 		struct fpacc87	fp_acc;
-		uint8_t		fp_pad[6];	/* padding */
+		__haiku_std_uint8		fp_pad[6];	/* padding */
 	} sv_fp[8];
 	struct xmmacc		sv_xmm[16];
-	uint8_t			sv_pad[96];
+	__haiku_std_uint8			sv_pad[96];
 } __aligned(16);
 #endif
 
 struct xstate_hdr {
-	uint64_t	xstate_bv;
-	uint8_t		xstate_rsrv0[16];
-	uint8_t		xstate_rsrv[40];
+	__haiku_std_uint64	xstate_bv;
+	__haiku_std_uint8		xstate_rsrv0[16];
+	__haiku_std_uint8		xstate_rsrv[40];
 };
 
 struct savexmm_xstate {
@@ -165,10 +165,10 @@ struct savexmm_ymm {
 	struct __envxmm32	sv_env;
 	struct {
 		struct fpacc87	fp_acc;
-		int8_t		fp_pad[6];	/* padding */
+		__haiku_std_int8		fp_pad[6];	/* padding */
 	} sv_fp[8];
 	struct xmmacc		sv_xmm[16];
-	uint8_t			sv_pad[96];
+	__haiku_std_uint8			sv_pad[96];
 	struct savexmm_xstate	sv_xstate;
 } __aligned(64);
 
@@ -181,10 +181,10 @@ struct savefpu_ymm {
 	struct __envxmm64	sv_env;
 	struct {
 		struct fpacc87	fp_acc;
-		int8_t		fp_pad[6];	/* padding */
+		__haiku_std_int8		fp_pad[6];	/* padding */
 	} sv_fp[8];
 	struct xmmacc		sv_xmm[16];
-	uint8_t			sv_pad[96];
+	__haiku_std_uint8			sv_pad[96];
 	struct savefpu_xstate	sv_xstate;
 } __aligned(64);
 

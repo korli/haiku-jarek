@@ -1,0 +1,8 @@
+SubDir HAIKU_TOP src system libroot posix libc ;
+
+local arch ;
+for arch in $(TARGET_ARCHS) {
+	HaikuSubInclude arch $(arch) ;
+}
+
+SubInclude HAIKU_TOP src system libroot posix libc gen ;

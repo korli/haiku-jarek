@@ -1,0 +1,2 @@
+SubDir HAIKU_TOP src system libroot posix msun ;
+SubInclude HAIKU_TOP src system libroot posix msun $(TARGET_ARCH) ;

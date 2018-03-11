@@ -26,25 +26,23 @@ typedef uint32_t in_addr_t;
  * and we are not allowed to import all the BeOS types here.
  */
 #ifndef htonl
-#	ifdef __HAIKU_BEOS_COMPATIBLE_TYPES
-		extern unsigned long __swap_int32(unsigned long);	/* private */
-#	else
-		extern unsigned int __swap_int32(unsigned int);	/* private */
-#	endif
-	extern uint16_t __swap_int16(uint16_t);	/* private */
-#	if BYTE_ORDER == LITTLE_ENDIAN
-#		define htonl(x) ((uint32_t)__swap_int32(x))
-#		define ntohl(x) ((uint32_t)__swap_int32(x))
-#		define htons(x) __swap_int16(x)
-#		define ntohs(x) __swap_int16(x)
-#	elif BYTE_ORDER == BIG_ENDIAN
-#		define htonl(x) (x)
-#		define ntohl(x) (x)
-#		define htons(x) (x)
-#		define ntohs(x) (x)
-#	else
-#		error Unknown byte order.
-#	endif
+	#ifndef _BYTEORDER_PROTOTYPED
+	#define	_BYTEORDER_PROTOTYPED
+		__BEGIN_DECLS
+		uint32_t	htonl(uint32_t);
+		uint16_t	htons(uint16_t);
+		uint32_t	ntohl(uint32_t);
+		uint16_t	ntohs(uint16_t);
+		__END_DECLS
+	#endif
+
+	#ifndef _BYTEORDER_FUNC_DEFINED
+		#define	_BYTEORDER_FUNC_DEFINED
+		#define	htonl(x)	__htonl(x)
+		#define	htons(x)	__htons(x)
+		#define	ntohl(x)	__ntohl(x)
+		#define	ntohs(x)	__ntohs(x)
+	#endif
 #endif
 
 

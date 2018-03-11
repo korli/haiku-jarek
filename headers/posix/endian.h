@@ -28,6 +28,10 @@
 #define __LITTLE_ENDIAN		LITTLE_ENDIAN
 #define __BYTE_ORDER		BYTE_ORDER
 
+#define _BIG_ENDIAN			BIG_ENDIAN
+#define _LITTLE_ENDIAN		LITTLE_ENDIAN
+#define _BYTE_ORDER			BYTE_ORDER
+
 #include __HAIKU_ARCH_HEADER(arch_endian.h)
 
 

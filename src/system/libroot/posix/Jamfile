@@ -38,6 +38,7 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			syslog.cpp
 			termios.c
 			utime.c
+			ntoh.c
 			;
 	}
 }
@@ -60,5 +61,7 @@ SubInclude HAIKU_TOP src system libroot posix sys ;
 SubInclude HAIKU_TOP src system libroot posix time ;
 SubInclude HAIKU_TOP src system libroot posix unistd ;
 SubInclude HAIKU_TOP src system libroot posix wchar ;
+SubInclude HAIKU_TOP src system libroot posix msun ;
+SubInclude HAIKU_TOP src system libroot posix libc ;
 
 SubInclude HAIKU_TOP src system libroot posix glibc ;

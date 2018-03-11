@@ -1,0 +1,17 @@
+SubDir HAIKU_TOP src system libroot posix libc arch x86 ;
+
+UsePrivateHeaders libroot ;
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup x86 x86_gcc2 ] {
+	on $(architectureObject) {
+		local architecture = $(TARGET_PACKAGING_ARCH) ;
+
+		MergeObject <$(architecture)>posix_libc_arch_$(TARGET_ARCH).o :
+			fabs.S
+			flt_rounds.c
+			infinity.c
+			;
+
+	}
+}

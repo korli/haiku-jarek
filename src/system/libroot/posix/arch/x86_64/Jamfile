@@ -13,7 +13,6 @@ for architectureObject in [ MultiArchSubDirSetup x86_64 ] {
 			;
 
 		MergeObject <$(architecture)>posix_arch_$(TARGET_ARCH).o :
-			fenv.c
 			sigsetjmp.S
 			siglongjmp.S
 

@@ -10,7 +10,7 @@
 
 #include <stdlib.h>
 #include <thread.h>
-
+#include <endian.h>
 
 //#define TRACE_DRIVER
 #ifdef TRACE_DRIVER
@@ -23,9 +23,6 @@
 
 #define rotr32(x, n) ((((uint32)(x)) >> ((int) ((n) & 31))) | (((uint32)(x)) << ((int) ((32 - ((n) & 31))))))
 #define rotl32(x, n) ((((uint32)(x)) << ((int) ((n) & 31))) | (((uint32)(x)) >> ((int) ((32 - ((n) & 31))))))
-
-#define bswap32(x) \
-	((rotl32((uint32)(x), 8) & 0x00ff00ff) | (rotr32((uint32)(x), 8) & 0xff00ff00))
 
 typedef union _OCTET {
 	uint64	Q[1];

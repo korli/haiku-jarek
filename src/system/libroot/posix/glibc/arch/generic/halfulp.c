@@ -40,7 +40,7 @@
 #include "dla.h"
 #include "math_private.h"
 
-double __ieee754_sqrt(double x);
+double sqrt(double x);
 
 int4 tab54[32] = {
    262143, 11585, 1782, 511, 210, 107, 63, 42,
@@ -92,7 +92,7 @@ double __halfulp(double x, double y)
 
                             /*   now treat x        */
   while (k>0) {
-    z = __ieee754_sqrt(x);
+    z = sqrt(x);
     EMULV(z,z,u,uu,j1,j2,j3,j4,j5);
     if (((u-x)+uu) != 0) break;
     x = z;

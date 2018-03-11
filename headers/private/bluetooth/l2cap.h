@@ -29,12 +29,7 @@
 #define _L2CAP_
 
 #include <bluetooth/bluetooth.h>
-
-// TODO: from BSD compatibility layer
-#define htole16(x) (x)
-#define le16toh(x) (x)
-#define le32toh(x) (x)
-#define htole32(x) (x)
+#include <endian.h>
 
 #define HZ	1000000 // us per second TODO: move somewhere more generic
 #define bluetooth_l2cap_ertx_timeout (60 * HZ)

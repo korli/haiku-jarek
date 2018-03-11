@@ -84,18 +84,18 @@ struct save87 {
 };
 
 struct  envxmm {
-	uint16	en_cw;		/* control word (16bits) */
-	uint16	en_sw;		/* status word (16bits) */
-	uint16	en_tw;		/* tag word (16bits) */
-	uint16	en_opcode;	/* opcode last executed (11 bits ) */
-	uint32	en_fip;		/* floating point instruction pointer */
-	uint16	en_fcs;		/* floating code segment selector */
-	uint16	en_pad0;	/* padding */
-	uint32	en_foo;		/* floating operand offset */
-	uint16	en_fos;		/* floating operand segment selector */
-	uint16	en_pad1;	/* padding */
-	uint32	en_mxcsr;	/* SSE control/status register */
-	uint32	en_mxcsr_mask;	/* valid bits in mxcsr */
+	__haiku_std_uint16	en_cw;		/* control word (16bits) */
+	__haiku_std_uint16	en_sw;		/* status word (16bits) */
+	__haiku_std_uint16	en_tw;		/* tag word (16bits) */
+	__haiku_std_uint16	en_opcode;	/* opcode last executed (11 bits ) */
+	__haiku_std_uint32	en_fip;		/* floating point instruction pointer */
+	__haiku_std_uint16	en_fcs;		/* floating code segment selector */
+	__haiku_std_uint16	en_pad0;	/* padding */
+	__haiku_std_uint32	en_foo;		/* floating operand offset */
+	__haiku_std_uint16	en_fos;		/* floating operand segment selector */
+	__haiku_std_uint16	en_pad1;	/* padding */
+	__haiku_std_uint32	en_mxcsr;	/* SSE control/status register */
+	__haiku_std_uint32	en_mxcsr_mask;	/* valid bits in mxcsr */
 };
 
 /* Contents of each SSE extended accumulator */

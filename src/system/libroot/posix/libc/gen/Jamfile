@@ -1,0 +1,18 @@
+SubDir HAIKU_TOP src system libroot posix libc gen ;
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		local architecture = $(TARGET_PACKAGING_ARCH) ;
+
+		UsePrivateHeaders libroot ;
+		
+		SubDirSysHdrs $(HAIKU_TOP) src system libroot posix libc arch $(TARGET_ARCH) ;
+		SubDirSysHdrs $(HAIKU_TOP) src system libroot posix libc include ;
+
+		MergeObject <$(architecture)>posix_libc_gen.o :
+			ldexp.c
+			isinf.c
+			;
+	}
+}
