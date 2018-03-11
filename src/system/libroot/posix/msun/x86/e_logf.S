@@ -14,4 +14,9 @@ ENTRY(logf)
 	fyl2x
 	ret
 
+.weak __logf
+.equ __logf, logf
+.weak __ieee754_logf
+.equ __ieee754_logf, logf
+
 	.section .note.GNU-stack,"",%progbits

@@ -12,6 +12,7 @@ __FBSDID("$FreeBSD$");
 
 #include <complex.h>
 #include <math.h>
+#include "math_private.h"
 
 long double
 cabsl(long double complex z)

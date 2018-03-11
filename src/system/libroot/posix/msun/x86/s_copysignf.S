@@ -19,4 +19,7 @@ ENTRY(copysignf)
 	ret
 END(copysignf)
 
+.weak __copysignf
+.equ __copysignf, copysignf
+
 	.section .note.GNU-stack,"",%progbits

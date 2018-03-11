@@ -32,6 +32,7 @@ __FBSDID("$FreeBSD$");
 #include <math.h>
 
 #include "fpmath.h"
+#include "math_private.h"
 
 float
 fmaxf(float x, float y)

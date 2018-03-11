@@ -15,4 +15,7 @@ ENTRY(significandf)
 	ret
 END(significandf)
 
+.weak __significandf
+.equ __significandf, significandf
+
 	.section .note.GNU-stack,"",%progbits

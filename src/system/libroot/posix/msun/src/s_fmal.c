@@ -34,6 +34,7 @@ __FBSDID("$FreeBSD$");
 #include <math.h>
 
 #include "fpmath.h"
+#include "math_private.h"
 
 /*
  * A struct dd represents a floating-point number with twice the precision

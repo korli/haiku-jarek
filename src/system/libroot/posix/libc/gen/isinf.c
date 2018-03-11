@@ -73,3 +73,7 @@ __isinfl(long double e)
 	return (u.bits.exp == 32767 && u.bits.manl == 0 && u.bits.manh == 0);
 #endif
 }
+
+#if defined(__HAIKU_ARCH_X86) || defined(__HAIKU_ARCH_X86_64)
+__weak_reference(__isinfl, isinfl);
+#endif

@@ -29,6 +29,7 @@
  */
 
 #include <complex.h>
+#include "math_private.h"
 
 long double
 creall(long double complex z)

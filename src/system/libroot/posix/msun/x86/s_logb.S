@@ -43,4 +43,7 @@ ENTRY(logb)
 	ret
 END(logb)
 
+.weak __logb
+.equ __logb, logb
+
 	.section .note.GNU-stack,"",%progbits

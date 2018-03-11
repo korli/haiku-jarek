@@ -15,4 +15,7 @@ ENTRY(logbf)
 	ret
 END(logbf)
 
+.weak __logbf
+.equ __logbf, logbf
+
 	.section .note.GNU-stack,"",%progbits

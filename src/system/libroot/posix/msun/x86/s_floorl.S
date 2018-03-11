@@ -27,4 +27,7 @@ ENTRY(floorl)
 	ret
 END(floorl)
 
+.weak __floorl
+.equ __floorl, floorl
+
 	.section .note.GNU-stack,"",%progbits

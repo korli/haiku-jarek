@@ -41,4 +41,10 @@ ENTRY(sqrtl)
 	fsqrt
 	ret
 
+.weak __sqrtl
+.equ __sqrtl, sqrtl
+
+.weak __ieee754_sqrtl
+.equ __ieee754_sqrtl, sqrtl
+
 	.section .note.GNU-stack,"",%progbits

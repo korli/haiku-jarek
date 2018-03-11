@@ -15,4 +15,9 @@ ENTRY(log10f)
 	ret
 END(log10f)
 
+.weak __log10f
+.equ __log10f, log10f
+.weak __ieee754_log10f
+.equ __ieee754_log10f, log10f
+
 	.section .note.GNU-stack,"",%progbits

@@ -43,4 +43,7 @@ ENTRY(significand)
 	ret
 END(significand)
 
+.weak __significand
+.equ __significand, significand
+
 	.section .note.GNU-stack,"",%progbits

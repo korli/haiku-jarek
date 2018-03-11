@@ -43,6 +43,7 @@
 #include <sys/types.h>
 
 #include "fpmath.h"
+#include "math_private.h"
 
 #if LDBL_MANL_SIZE > 32
 #define	MASK	((__haiku_std_uint64)-1)

@@ -29,6 +29,7 @@
  */
 
 #include <complex.h>
+#include "math_private.h"
 
 float
 crealf(float complex z)

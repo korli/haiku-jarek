@@ -42,4 +42,7 @@ ENTRY(rint)
 	ret
 END(rint)
 
+.weak __rint
+.equ __rint, rint
+
 	.section .note.GNU-stack,"",%progbits

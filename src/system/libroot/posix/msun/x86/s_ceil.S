@@ -57,4 +57,7 @@ ENTRY(ceil)
 	ret
 END(ceil)
 
+.weak __ceil
+.equ __ceil, ceil
+
 	.section .note.GNU-stack,"",%progbits

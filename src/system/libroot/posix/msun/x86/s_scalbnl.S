@@ -16,7 +16,13 @@ ENTRY(scalbnl)
 	ret
 END(scalbnl)
 
-.globl CNAME(ldexpl)
-.set	CNAME(ldexpl),CNAME(scalbnl)
+.globl ldexpl
+.set	ldexpl,scalbnl
+
+.weak __scalbnl
+.equ __scalbnl, scalbnl
+
+.weak __ldexpl
+.equ __ldexpl, scalbnl
 
 	.section .note.GNU-stack,"",%progbits

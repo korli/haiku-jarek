@@ -16,7 +16,13 @@ ENTRY(scalbnf)
 	ret
 END(scalbnf)
 
-.globl CNAME(ldexpf)
-.set	CNAME(ldexpf),CNAME(scalbnf)
+.globl ldexpf
+.set	ldexpf,scalbnf
+
+.weak __scalbnf
+.equ __scalbnf, scalbnf
+
+.weak __ldexpf
+.equ __ldexpf, ldexpf
 
 	.section .note.GNU-stack,"",%progbits

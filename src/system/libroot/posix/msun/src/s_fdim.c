@@ -30,6 +30,7 @@
 __FBSDID("$FreeBSD$");
 
 #include <math.h>
+#include "math_private.h"
 
 #define	DECL(type, fn)			\
 type					\

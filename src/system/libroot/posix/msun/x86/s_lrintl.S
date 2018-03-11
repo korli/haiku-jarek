@@ -34,4 +34,7 @@ ENTRY(lrintl)
 	popl	%eax
 	ret
 
+.weak __lrintl
+.equ __lrintl, lrintl
+
 	.section .note.GNU-stack,"",%progbits

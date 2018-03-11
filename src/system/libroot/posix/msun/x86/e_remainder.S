@@ -47,4 +47,10 @@ ENTRY(remainder)
 	ret
 END(remainder)
 
+.weak __remainder
+.equ __remainder, remainder
+
+.weak __ieee754_remainder
+.equ __ieee754_remainder, remainder
+
 	.section .note.GNU-stack,"",%progbits

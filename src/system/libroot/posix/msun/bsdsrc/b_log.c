@@ -40,6 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <math.h>
 
 #include "mathimpl.h"
+#include "math_private.h"
 
 /* Table-driven natural logarithm.
  *

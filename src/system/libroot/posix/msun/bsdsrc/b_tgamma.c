@@ -46,6 +46,7 @@ __FBSDID("$FreeBSD$");
 
 #include <math.h>
 #include "mathimpl.h"
+#include "math_private.h"
 
 /* METHOD:
  * x < 0: Use reflection formula, G(x) = pi/(sin(pi*x)*x*G(x))

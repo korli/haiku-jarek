@@ -33,6 +33,7 @@ __FBSDID("$FreeBSD$");
 #include <math.h>
 
 #include "fpmath.h"
+#include "math_private.h"
 
 double
 fmin(double x, double y)

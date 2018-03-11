@@ -30,6 +30,7 @@
 __FBSDID("$FreeBSD$");
 
 #include "invtrig.h"
+#include "math_private.h"
 
 /*
  * asinl() and acosl()

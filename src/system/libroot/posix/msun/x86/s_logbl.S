@@ -42,4 +42,7 @@ ENTRY(logbl)
 	fstp	%st
 	ret
 
+.weak __logbl
+.equ __logbl, logbl
+
 	.section .note.GNU-stack,"",%progbits

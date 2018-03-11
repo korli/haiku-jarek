@@ -29,4 +29,7 @@ ENTRY(ceilf)
 	ret
 END(ceilf)
 
+.weak __ceilf
+.equ __ceilf, ceilf
+
 	.section .note.GNU-stack,"",%progbits

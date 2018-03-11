@@ -62,4 +62,7 @@ ENTRY(remquo)
 	ret
 END(remquo)
 
+.weak __remquo
+.equ __remquo, remquo
+
 	.section .note.GNU-stack,"",%progbits

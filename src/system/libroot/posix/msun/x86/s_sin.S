@@ -55,4 +55,7 @@ ENTRY(sin)
 	ret
 END(sin)
 
+.weak __sin
+.equ __sin, sin
+
 	.section .note.GNU-stack,"",%progbits

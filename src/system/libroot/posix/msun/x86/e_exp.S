@@ -97,4 +97,10 @@ x_not_minus_Inf:
 	ret
 END(exp)
 
+.weak __exp
+.equ __exp, exp
+
+.weak __ieee754_exp
+.equ __ieee754_exp, exp
+
 	.section .note.GNU-stack,"",%progbits

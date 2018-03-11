@@ -38,4 +38,7 @@ FUNCTION(fabs):
 	ret
 FUNCTION_END(fabs)
 
+.weak __fabs
+.equ __fabs, fabs
+
 	.section .note.GNU-stack,"",%progbits

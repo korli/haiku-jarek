@@ -43,4 +43,9 @@ ENTRY(log10)
 	ret
 END(log10)
 
+.weak __log10
+.equ __log10, log10
+.weak __ieee754_log10
+.equ __ieee754_log10, log10
+
 	.section .note.GNU-stack,"",%progbits

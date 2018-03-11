@@ -31,6 +31,7 @@ __FBSDID("$FreeBSD$");
 
 #include <fenv.h>
 #include <math.h>
+#include "math_private.h"
 
 /*
  * We save and restore the floating-point environment to avoid raising

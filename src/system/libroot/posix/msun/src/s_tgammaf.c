@@ -30,6 +30,7 @@
 __FBSDID("$FreeBSD$");
 
 #include <math.h>
+#include "math_private.h"
 
 /*
  * We simply call tgamma() rather than bloating the math library with

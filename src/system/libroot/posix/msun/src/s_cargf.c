@@ -31,6 +31,7 @@ __FBSDID("$FreeBSD$");
 
 #include <complex.h>
 #include <math.h>
+#include "math_private.h"
 
 float
 cargf(float complex z)

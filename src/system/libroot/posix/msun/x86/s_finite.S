@@ -45,4 +45,7 @@ ENTRY(finite)
 	ret
 END(finite)
 
+.weak __finite
+.equ __finite, finite
+
 	.section .note.GNU-stack,"",%progbits

@@ -55,4 +55,7 @@ ENTRY(cos)
 	ret
 END(cos)
 
+.weak __cos
+.equ __cos, cos
+
 	.section .note.GNU-stack,"",%progbits

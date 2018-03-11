@@ -27,4 +27,7 @@ ENTRY(ceill)
 	ret
 END(ceill)
 
+.weak __ceill
+.equ __ceill, ceill
+
 	.section .note.GNU-stack,"",%progbits

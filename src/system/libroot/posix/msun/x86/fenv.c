@@ -126,6 +126,8 @@ feraiseexcept(int excepts)
 	return (0);
 }
 
+__weak_reference(feraiseexcept, __feraiseexcept);
+
 extern inline int fetestexcept(int __excepts);
 extern inline int fegetround(void);
 extern inline int fesetround(int __round);

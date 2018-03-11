@@ -33,6 +33,7 @@
 #include <math.h>
 
 #include "fpmath.h"
+#include "math_private.h"
 
 long double
 fabsl(long double x)

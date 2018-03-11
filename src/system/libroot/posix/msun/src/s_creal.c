@@ -29,6 +29,7 @@
  */
 
 #include <complex.h>
+#include "math_private.h"
 
 double
 creal(double complex z)

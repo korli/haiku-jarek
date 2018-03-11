@@ -31,6 +31,7 @@
 #include <math.h>
 
 #include "fpmath.h"
+#include "math_private.h"
 
 int
 __isfinite(double d)

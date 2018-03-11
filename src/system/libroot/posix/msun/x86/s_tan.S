@@ -57,4 +57,7 @@ ENTRY(tan)
 	ret
 END(tan)
 
+.weak __tan
+.equ __tan, tan
+
 	.section .note.GNU-stack,"",%progbits

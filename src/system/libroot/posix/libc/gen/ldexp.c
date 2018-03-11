@@ -120,3 +120,7 @@ ldexp(double x, int n)
 	SET_HIGH_WORD(x,(hx&0x800fffff)|(k<<20));
         return x*twom54;
 }
+
+#if defined(__HAIKU_ARCH_X86) || defined(__HAIKU_ARCH_X86_64)
+__weak_reference(ldexp, __ldexp);
+#endif

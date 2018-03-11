@@ -14,4 +14,10 @@ ENTRY(sqrtf)
 	ret
 END(sqrtf)
 
+.weak __sqrtf
+.equ __sqrtf, sqrtf
+
+.weak __ieee754_sqrtf
+.equ __ieee754_sqrtf, sqrtf
+
 	.section .note.GNU-stack,"",%progbits

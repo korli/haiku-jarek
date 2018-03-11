@@ -1,7 +1,8 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
- * Copyright (c) 2004 David Schultz <das@FreeBSD.ORG>
+ * Copyright (c) 2003 Mike Barcroft <mike@FreeBSD.org>
+ * Copyright (c) 2002, 2003 David Schultz <das@FreeBSD.ORG>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,35 +25,81 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * $FreeBSD$
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+#include <endian.h>
+
+#include <float.h>
 
 #include <math.h>
+#include <stdint.h>
 
 #include "fpmath.h"
-#include "math_private.h"
 
-long double
-fminl(long double x, long double y)
+int
+__fpclassifyf(float f)
 {
-	union IEEEl2bits u[2];
+	union IEEEf2bits u;
 
-	u[0].e = x;
-	mask_nbit_l(u[0]);
-	u[1].e = y;
-	mask_nbit_l(u[1]);
+	u.f = f;
+	if (u.bits.exp == 0) {
+		if (u.bits.man == 0)
+			return (FP_ZERO);
+		return (FP_SUBNORMAL);
+	}
+	if (u.bits.exp == 255) {
+		if (u.bits.man == 0)
+			return (FP_INFINITE);
+		return (FP_NAN);
+	}
+	return (FP_NORMAL);
+}
 
-	/* Check for NaNs to avoid raising spurious exceptions. */
-	if (u[0].bits.exp == 32767 && (u[0].bits.manh | u[0].bits.manl) != 0)
-		return (y);
-	if (u[1].bits.exp == 32767 && (u[1].bits.manh | u[1].bits.manl) != 0)
-		return (x);
+int
+__fpclassifyd(double d)
+{
+	union IEEEd2bits u;
 
-	/* Handle comparisons of signed zeroes. */
-	if (u[0].bits.sign != u[1].bits.sign)
-		return (u[1].bits.sign ? y : x);
+	u.d = d;
+	if (u.bits.exp == 0) {
+		if ((u.bits.manl | u.bits.manh) == 0)
+			return (FP_ZERO);
+		return (FP_SUBNORMAL);
+	}
+	if (u.bits.exp == 2047) {
+		if ((u.bits.manl | u.bits.manh) == 0)
+			return (FP_INFINITE);
+		return (FP_NAN);
+	}
+	return (FP_NORMAL);
+}
 
-	return (x < y ? x : y);
+int
+__fpclassifyl(long double e)
+{
+	union IEEEl2bits u;
+
+	u.e = e;
+	if (u.bits.exp == 0) {
+		if ((u.bits.manl | u.bits.manh) == 0)
+			return (FP_ZERO);
+		return (FP_SUBNORMAL);
+	}
+	mask_nbit_l(u);		/* Mask normalization bit if applicable. */
+#if LDBL_MANT_DIG == 53
+	if (u.bits.exp == 2047) {
+		if ((u.bits.manl | u.bits.manh) == 0)
+			return (FP_INFINITE);
+		return (FP_NAN);
+	}
+#else
+	if (u.bits.exp == 32767) {
+		if ((u.bits.manl | u.bits.manh) == 0)
+			return (FP_INFINITE);
+		return (FP_NAN);
+	}
+#endif
+	return (FP_NORMAL);
 }

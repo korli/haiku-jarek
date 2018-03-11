@@ -30,6 +30,7 @@
 #include <limits.h>
 #include <fenv.h>
 #include <math.h>
+#include "math_private.h"
 
 #ifndef type
 __FBSDID("$FreeBSD$");

@@ -13,6 +13,7 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 		MergeObject <$(architecture)>posix_libc_gen.o :
 			ldexp.c
 			isinf.c
+			fpclassify.c
 			;
 	}
 }

@@ -26,4 +26,7 @@ ENTRY(truncl)
 	ret
 END(truncl)
 
+.weak __truncl
+.equ __truncl, truncl
+
 	.section .note.GNU-stack,"",%progbits

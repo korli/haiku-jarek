@@ -75,6 +75,7 @@ __FBSDID("$FreeBSD$");
  */
 
 #include "mathimpl.h"
+#include "math_private.h"
 
 static const double p1 = 0x1.555555555553ep-3;
 static const double p2 = -0x1.6c16c16bebd93p-9;

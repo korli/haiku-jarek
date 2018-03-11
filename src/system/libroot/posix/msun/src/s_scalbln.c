@@ -27,9 +27,9 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
 
 #include <math.h>
+#include "math_private.h"
 
 #define	NMAX	65536
 #define	NMIN	-65536

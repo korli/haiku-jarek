@@ -41,4 +41,7 @@ ENTRY(rintl)
 	frndint
 	ret
 
+.weak __rintl
+.equ __rintl, rintl
+
 	.section .note.GNU-stack,"",%progbits

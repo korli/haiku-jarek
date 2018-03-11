@@ -14,4 +14,7 @@ ENTRY(rintf)
 	ret
 END(rintf)
 
+.weak __rintf
+.equ __rintf, rintf
+
 	.section .note.GNU-stack,"",%progbits

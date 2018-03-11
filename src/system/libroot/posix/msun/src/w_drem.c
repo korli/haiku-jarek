@@ -6,6 +6,7 @@
  */
 
 #include <math.h>
+#include "math_private.h"
 
 double
 drem(x, y)

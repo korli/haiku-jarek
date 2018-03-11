@@ -62,4 +62,7 @@ ENTRY(remquol)
 	movl	%eax,(%ecx)
 	ret
 
+.weak __remquol
+.equ __remquol, remquol
+
 	.section .note.GNU-stack,"",%progbits

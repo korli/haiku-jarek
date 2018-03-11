@@ -38,6 +38,9 @@ FUNCTION(fabs):
 	ret
 FUNCTION_END(fabs)
 
+.weak __fabs
+.equ __fabs, fabs
+
 	.data
 signbit:
 	.quad	0x8000000000000000

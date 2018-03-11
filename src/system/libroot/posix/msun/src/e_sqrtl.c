@@ -34,6 +34,7 @@ __FBSDID("$FreeBSD$");
 
 #include "fpmath.h"
 #include "math.h"
+#include "math_private.h"
 
 /* Return (x + ulp) for normal positive x. Assumes no overflow. */
 static inline long double
