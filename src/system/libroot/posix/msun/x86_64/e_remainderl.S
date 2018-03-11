@@ -46,4 +46,10 @@ FUNCTION(remainderl):
 	ret
 FUNCTION_END(remainderl)
 
+.weak __remainderl
+.equ __remainderl, remainderl
+
+.weak __ieee754_remainderl
+.equ __ieee754_remainderl, remainderl
+
 	.section .note.GNU-stack,"",%progbits

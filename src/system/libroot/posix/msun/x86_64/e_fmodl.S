@@ -46,4 +46,10 @@ FUNCTION(fmodl):
 	ret
 FUNCTION_END(fmodl)
 
+.weak __fmodl
+.equ __fmodl, fmodl
+
+.weak __ieee754_fmodl
+.equ __ieee754_fmodl, fmodl
+
 	.section .note.GNU-stack,"",%progbits

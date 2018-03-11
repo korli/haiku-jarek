@@ -43,4 +43,7 @@ FUNCTION(rintl):
 	ret
 FUNCTION_END(rintl)
 
+.weak __rintl
+.equ __rintl, rintl
+
 	.section .note.GNU-stack,"",%progbits

@@ -20,4 +20,10 @@ FUNCTION(fmodf):
 	ret
 FUNCTION_END(fmodf)
 
+.weak __fmodf
+.equ __fmodf, fmodf
+
+.weak __ieee754_fmodf
+.equ __ieee754_fmodf, fmodf
+
 	.section .note.GNU-stack,"",%progbits

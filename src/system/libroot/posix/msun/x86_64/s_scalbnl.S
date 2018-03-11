@@ -17,4 +17,10 @@ FUNCTION_END(scalbnl)
 .globl	ldexpl
 .set	ldexpl,scalbnl
 
+.weak __scalbnl
+.equ __scalbnl, scalbnl
+
+.weak __ldexpl
+.equ __ldexpl, scalbnl
+
 	.section .note.GNU-stack,"",%progbits

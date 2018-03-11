@@ -87,3 +87,7 @@ __ieee754_logf(float x)
 		     return dk*ln2_hi-((s*(f-R)-dk*ln2_lo)-f);
 	}
 }
+
+#if defined(__HAIKU_ARCH_X86_64)
+__weak_reference (logf, __logf_finite);
+#endif

@@ -42,4 +42,7 @@ FUNCTION(logbl):
 	ret
 FUNCTION_END(logbl)
 
+.weak __logbl
+.equ __logbl, logbl
+
 	.section .note.GNU-stack,"",%progbits

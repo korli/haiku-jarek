@@ -21,7 +21,7 @@ __FBSDID("$FreeBSD$");
 #include "math.h"
 #include "math_private.h"
 
-int __finite(double x)
+int finite(double x)
 {
 	int32_t hx;
 	GET_HIGH_WORD(hx,x);
@@ -29,4 +29,4 @@ int __finite(double x)
 }
 
 
-__weak_reference(__finite, finite);
+__weak_reference(finite, __finite);

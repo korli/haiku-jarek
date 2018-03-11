@@ -38,4 +38,7 @@ FUNCTION(scalbn):
 	ret
 FUNCTION_END(scalbn)
 
+.weak __scalbn
+.equ __scalbn, scalbn
+
 	.section .note.GNU-stack,"",%progbits

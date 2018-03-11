@@ -21,4 +21,10 @@ FUNCTION(remainderf):
 
 FUNCTION_END(remainderf)
 
+.weak __remainderf
+.equ __remainderf, remainderf
+
+.weak __ieee754_remainderf
+.equ __ieee754_remainderf, remainderf
+
 	.section .note.GNU-stack,"",%progbits

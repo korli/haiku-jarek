@@ -31,5 +31,10 @@ FUNCTION(sqrt):
 	ret
 FUNCTION_END(sqrt)
 
+.weak __sqrt
+.equ __sqrt, sqrt
+
+.weak __ieee754_sqrt
+.equ __ieee754_sqrt, sqrt
 
 	.section .note.GNU-stack,"",%progbits

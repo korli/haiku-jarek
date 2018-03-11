@@ -41,4 +41,10 @@ FUNCTION_END(scalbnf)
 .globl ldexpf
 .set	ldexpf,scalbnf
 
+.weak __scalbnf
+.equ __scalbnf, scalbnf
+
+.weak __ldexpf
+.equ __ldexpf, scalbnf
+
 	.section .note.GNU-stack,"",%progbits

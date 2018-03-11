@@ -1128,6 +1128,7 @@ _MATH_COMPAT(scalbn);
 _MATH_COMPAT(scalbnf);
 _MATH_COMPAT(scalbnl);
 _MATH_COMPAT(significand);
+_MATH_COMPAT(significandf);
 _MATH_COMPAT(sinl);
 _MATH_COMPAT(sinf);
 _MATH_COMPAT(sin);

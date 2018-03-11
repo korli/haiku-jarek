@@ -28,6 +28,7 @@ __FBSDID("$FreeBSD$");
 #include <stdint.h>
 
 #include "fpmath.h"
+#include "math_private.h"
 
 #ifdef LDBL_IMPLICIT_NBIT
 #define	MANH_SIZE	(LDBL_MANH_SIZE + 1)

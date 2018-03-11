@@ -44,6 +44,7 @@
 #include "atnat.h"
 #include "math.h"
 
+#if 0
 void __mpatan(mp_no *,mp_no *,int);          /* see definition in mpatan.c */
 static double atanMp(double,const int[]);
 double __signArctan(double,double);
@@ -199,7 +200,7 @@ double atan(double x) {
   }
 
 }
-
+#endif
 
   /* Fix the sign of y and return */
 double  __signArctan(double x,double y){
@@ -208,6 +209,7 @@ double  __signArctan(double x,double y){
     else        return  y;
 }
 
+#if 0
  /* Final stages. Compute atan(x) by multiple precision arithmetic */
 static double atanMp(double x,const int pr[]){
   mp_no mpx,mpy,mpy2,mperr,mpt1,mpy1;
@@ -227,4 +229,5 @@ for (i=0; i<M; i++) {
 
 #ifdef NO_LONG_DOUBLE
 weak_alias (atan, atanl)
+#endif
 #endif

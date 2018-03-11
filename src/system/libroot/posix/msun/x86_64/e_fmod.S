@@ -50,4 +50,10 @@ FUNCTION(fmod):
 	ret
 FUNCTION_END(fmod)
 
+.weak __fmod
+.equ __fmod, fmod
+
+.weak __ieee754_fmod
+.equ __ieee754_fmod, fmod
+
 	.section .note.GNU-stack,"",%progbits

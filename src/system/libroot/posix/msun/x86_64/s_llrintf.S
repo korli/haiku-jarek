@@ -3,3 +3,6 @@
 /* sizeof(long) == sizeof(long long) */
 #define	fn	llrintf
 #include "s_lrintf.S"
+
+.weak __llrintf
+.equ __llrintf, llrintf

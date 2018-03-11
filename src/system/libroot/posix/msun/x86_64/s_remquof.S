@@ -64,4 +64,7 @@ FUNCTION(remquof):
 	ret
 FUNCTION_END(remquof)
 
+.weak __remquof
+.equ __remquof, remquof
+
 	.section .note.GNU-stack,"",%progbits

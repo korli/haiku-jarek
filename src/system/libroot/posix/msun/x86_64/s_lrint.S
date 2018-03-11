@@ -35,4 +35,7 @@ FUNCTION(fn):
 	ret
 FUNCTION_END(fn)
 
+.weak __lrint
+.equ __lrint, lrint
+
 	.section .note.GNU-stack,"",%progbits
