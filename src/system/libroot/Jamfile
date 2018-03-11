@@ -51,8 +51,11 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			posix_stdlib.o
 			posix_string.o
 			posix_string_arch_$(TARGET_ARCH).o
+			
 			posix_libc_arch_$(TARGET_ARCH).o 
 			posix_libc_gen.o
+			posix_libc_gdtoa.o
+			
 			posix_sys.o
 			posix_time.o
 			posix_unistd.o

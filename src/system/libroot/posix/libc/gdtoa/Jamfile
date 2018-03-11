@@ -1,0 +1,55 @@
+SubDir HAIKU_TOP src system libroot posix libc gdtoa ;
+
+UsePrivateHeaders libroot shared ;
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		local architecture = $(TARGET_PACKAGING_ARCH) ;
+
+		UsePrivateSystemHeaders ;
+
+		SubDirSysHdrs $(HAIKU_TOP) src system libroot posix libc arch $(TARGET_ARCH) ;
+		SubDirSysHdrs $(HAIKU_TOP) src system libroot posix libc gdtoa ;
+		SubDirSysHdrs $(HAIKU_TOP) src system libroot posix libc stdio ;
+		SubDirSysHdrs $(HAIKU_TOP) src system libroot posix libc include ;
+
+		local machdepObjects ;
+		switch $(architecture) {
+			case aarch64 : machdepObjects = strtorQ.c machdep_ldisQ.c ;
+			case arm : machdepObjects = machdep_ldisd.c ;
+			case mips : machdepObjects = machdep_ldisd.c ;
+			case m68k : machdepObjects = machdep_ldisd.c ;
+			case riscv : machdepObjects = strtorQ.c machdep_ldisQ.c ;
+			case sparc64 : machdepObjects = strtorQ.c machdep_ldisQ.c ;
+			case x86 : machdepObjects = strtorx.c machdep_ldisx.c ;
+			case x86_64 : machdepObjects = strtorx.c machdep_ldisx.c ;
+			case * : machdepObjects = machdep_ldisd.c ;
+		}
+
+		MergeObject <$(architecture)>posix_libc_gdtoa.o :
+			_hdtoa.c 
+			_hldtoa.c 
+			_ldtoa.c 
+			glue.c
+			
+			dmisc.c 
+			dtoa.c 
+			gdtoa.c
+			gethex.c 
+			gmisc.c
+			hd_init.c
+			hexnan.c
+			misc.c
+			smisc.c
+			strtod.c
+			strtodg.c
+			strtof.c
+			strtord.c
+			sum.c
+			ulp.c
+			
+			$(machdepObjects)
+			;
+	}
+}

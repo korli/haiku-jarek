@@ -44,7 +44,7 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			srand48.c
 			srand48_r.c
 			strtod.c
-			strtold.c
+#			strtold.c
 			strtof.c
 			;
 	}
