@@ -1,0 +1,46 @@
+SubDir HAIKU_TOP src system libroot posix glibc arch aarch64 ;
+
+SubDirSysHdrs $(HAIKU_TOP) src system libroot posix glibc include arch aarch64 ;
+SubDirSysHdrs $(HAIKU_TOP) src system libroot posix glibc include arch generic ;
+SubDirSysHdrs $(HAIKU_TOP) src system libroot posix glibc include ;
+SubDirSysHdrs $(HAIKU_TOP) src system libroot posix glibc libio ;
+SubDirSysHdrs $(HAIKU_TOP) src system libroot posix glibc stdlib ;
+SubDirSysHdrs $(HAIKU_TOP) src system libroot posix glibc math ;
+SubDirSysHdrs $(HAIKU_TOP) src system libroot posix glibc ;
+
+SubDirHdrs $(HAIKU_TOP) src system libroot posix glibc arch generic ;
+
+UsePrivateHeaders libroot ;
+
+if $(OPTIM) = -O0 {
+	OPTIM = -O ;
+}
+
+# don't compile with debugging
+DEBUG = 0 ;
+
+SubDirCcFlags -D_GNU_SOURCE -D_IEEE_LIBM ;
+
+local genericSources =
+	memrchr.c
+	;
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup aarch64 ] {
+	on $(architectureObject) {
+		local architecture = $(TARGET_PACKAGING_ARCH) ;
+
+		MergeObject <$(architecture)>posix_gnu_arch_$(TARGET_ARCH)_generic.o :
+			$(genericSources)
+			;
+
+		MergeObjectFromObjects <$(architecture)>posix_gnu_arch_$(TARGET_ARCH).o
+			: :
+			<$(architecture)>posix_gnu_arch_$(TARGET_ARCH)_generic.o
+			;
+
+		SEARCH on [ FGristFiles $(genericSources) ]
+			= [ FDirName $(HAIKU_TOP) src system libroot posix glibc arch
+				generic ] ;
+	}
+}
