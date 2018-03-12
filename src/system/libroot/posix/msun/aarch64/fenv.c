@@ -28,7 +28,7 @@
  */
 
 #define	__fenv_static
-#include "fenv.h"
+#include "arch/aarch64/fenv.h"
 
 /*
  * Hopefully the system ID byte is immutable, so it's valid to use

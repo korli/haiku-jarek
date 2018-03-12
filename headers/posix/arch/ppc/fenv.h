@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2004-2005 David Schultz <das@FreeBSD.ORG>
  * All rights reserved.
  *
@@ -29,12 +31,14 @@
 #ifndef	_FENV_H_
 #define	_FENV_H_
 
-#include <stdint.h>
-#include <sys/cdefs.h>
-#include <sys/types.h>
+#include <sys/_types.h>
 
-typedef	uint32_t	fenv_t;
-typedef	uint32_t	fexcept_t;
+#ifndef	__fenv_static
+#define	__fenv_static	static
+#endif
+
+typedef	__uint32_t	fenv_t;
+typedef	__uint32_t	fexcept_t;
 
 /* Exception flags */
 #define	FE_INEXACT	0x02000000
@@ -85,8 +89,13 @@ extern const fenv_t	__fe_dfl_env;
 			 FE_OVERFLOW | FE_UNDERFLOW) >> _FPUSW_SHIFT)
 
 #ifndef _SOFT_FLOAT
+#ifdef __SPE__
+#define	__mffs(__env)	__asm __volatile("mfspr %0, 512" : "=r" (*(__env)))
+#define	__mtfsf(__env)	__asm __volatile("mtspr 512,%0" : : "r" (__env))
+#else
 #define	__mffs(__env)	__asm __volatile("mffs %0" : "=f" (*(__env)))
 #define	__mtfsf(__env)	__asm __volatile("mtfsf 255,%0" : : "f" (__env))
+#endif
 #else
 #define	__mffs(__env)
 #define	__mtfsf(__env)
@@ -95,12 +104,17 @@ extern const fenv_t	__fe_dfl_env;
 union __fpscr {
 	double __d;
 	struct {
-		uint32_t __junk;
+#if _BYTE_ORDER == _LITTLE_ENDIAN
 		fenv_t __reg;
+		__uint32_t __junk;
+#else
+		__uint32_t __junk;
+		fenv_t __reg;
+#endif
 	} __bits;
 };
 
-static __inline int
+__fenv_static inline int
 feclearexcept(int __excepts)
 {
 	union __fpscr __r;
@@ -113,7 +127,7 @@ feclearexcept(int __excepts)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 fegetexceptflag(fexcept_t *__flagp, int __excepts)
 {
 	union __fpscr __r;
@@ -123,7 +137,7 @@ fegetexceptflag(fexcept_t *__flagp, int __excepts)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 fesetexceptflag(const fexcept_t *__flagp, int __excepts)
 {
 	union __fpscr __r;
@@ -137,7 +151,7 @@ fesetexceptflag(const fexcept_t *__flagp, int __excepts)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 feraiseexcept(int __excepts)
 {
 	union __fpscr __r;
@@ -150,7 +164,7 @@ feraiseexcept(int __excepts)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 fetestexcept(int __excepts)
 {
 	union __fpscr __r;
@@ -159,7 +173,7 @@ fetestexcept(int __excepts)
 	return (__r.__bits.__reg & __excepts);
 }
 
-static __inline int
+__fenv_static inline int
 fegetround(void)
 {
 	union __fpscr __r;
@@ -168,7 +182,7 @@ fegetround(void)
 	return (__r.__bits.__reg & _ROUND_MASK);
 }
 
-static __inline int
+__fenv_static inline int
 fesetround(int __round)
 {
 	union __fpscr __r;
@@ -182,7 +196,7 @@ fesetround(int __round)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 fegetenv(fenv_t *__envp)
 {
 	union __fpscr __r;
@@ -192,7 +206,7 @@ fegetenv(fenv_t *__envp)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 feholdexcept(fenv_t *__envp)
 {
 	union __fpscr __r;
@@ -204,7 +218,7 @@ feholdexcept(fenv_t *__envp)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 fesetenv(const fenv_t *__envp)
 {
 	union __fpscr __r;
@@ -214,7 +228,7 @@ fesetenv(const fenv_t *__envp)
 	return (0);
 }
 
-static __inline int
+__fenv_static inline int
 feupdateenv(const fenv_t *__envp)
 {
 	union __fpscr __r;
@@ -228,7 +242,9 @@ feupdateenv(const fenv_t *__envp)
 
 #if __BSD_VISIBLE
 
-static __inline int
+/* We currently provide no external definitions of the functions below. */
+
+static inline int
 feenableexcept(int __mask)
 {
 	union __fpscr __r;
@@ -241,7 +257,7 @@ feenableexcept(int __mask)
 	return ((__oldmask & _ENABLE_MASK) << _FPUSW_SHIFT);
 }
 
-static __inline int
+static inline int
 fedisableexcept(int __mask)
 {
 	union __fpscr __r;
@@ -254,7 +270,7 @@ fedisableexcept(int __mask)
 	return ((__oldmask & _ENABLE_MASK) << _FPUSW_SHIFT);
 }
 
-static __inline int
+static inline int
 fegetexcept(void)
 {
 	union __fpscr __r;

@@ -29,7 +29,7 @@
  */
 
 #define	__fenv_static
-#include "fenv.h"
+#include "arch/mipsel/fenv.h"
 
 #ifdef __GNUC_GNU_INLINE__
 #error "This file must be compiled with C99 'inline' semantics"

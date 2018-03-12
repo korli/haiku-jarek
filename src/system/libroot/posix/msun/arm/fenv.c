@@ -30,7 +30,7 @@
  */
 
 #define	__fenv_static
-#include "fenv.h"
+#include "arch/arm/fenv.h"
 
 #include <machine/acle-compat.h>
 

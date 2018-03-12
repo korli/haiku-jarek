@@ -29,7 +29,6 @@
 #ifndef	_FENV_H_
 #define	_FENV_H_
 
-#include <stdint.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
@@ -37,8 +36,8 @@
 #define	__fenv_static	static
 #endif
 
-typedef	uint64_t	fenv_t;
-typedef	uint64_t	fexcept_t;
+typedef	__haiku_std_uint64	fenv_t;
+typedef	__haiku_std_uint64	fexcept_t;
 
 /* Exception flags */
 #define	FE_INVALID	0x00000001
