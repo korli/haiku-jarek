@@ -45,9 +45,9 @@
  */
 
 typedef struct {
-	uint32	n_namesz;	/* Length of name. */
-	uint32	n_descsz;	/* Length of descriptor. */
-	uint32	n_type;		/* Type of this note. */
+	__haiku_std_uint32	n_namesz;	/* Length of name. */
+	__haiku_std_uint32	n_descsz;	/* Length of descriptor. */
+	__haiku_std_uint32	n_type;		/* Type of this note. */
 } Elf_Note;
 
 /*
@@ -110,10 +110,10 @@ typedef struct {
  */
 
 typedef struct {
-	uint32	gh_nbuckets;	/* Number of hash buckets. */
-	uint32	gh_symndx;	/* First visible symbol in .dynsym. */
-	uint32	gh_maskwords;	/* #maskwords used in bloom filter. */
-	uint32	gh_shift2;	/* Bloom filter shift count. */
+	__haiku_std_uint32	gh_nbuckets;	/* Number of hash buckets. */
+	__haiku_std_uint32	gh_symndx;	/* First visible symbol in .dynsym. */
+	__haiku_std_uint32	gh_maskwords;	/* #maskwords used in bloom filter. */
+	__haiku_std_uint32	gh_shift2;	/* Bloom filter shift count. */
 } Elf_GNU_Hash_Header;
 
 /* Indexes into the e_ident array.  Keep synced with
