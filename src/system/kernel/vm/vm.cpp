@@ -1469,6 +1469,13 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 					panic("looking up mapping failed for va 0x%lx\n",
 						virtualAddress);
 				}
+
+				if(physicalAddress == 0) {
+					// We can use physical address 0 for kernel
+					// stacks to as buffer overflow marker.
+					continue;
+				}
+
 				page = vm_lookup_page(physicalAddress / B_PAGE_SIZE);
 				if (page == NULL) {
 					panic("looking up page failed for pa %#" B_PRIxPHYSADDR
@@ -3638,8 +3645,7 @@ unmap_and_free_physical_pages(VMTranslationMap* map, addr_t start, addr_t end)
 }
 
 
-void
-vm_free_unused_boot_loader_range(addr_t start, addr_t size)
+static void free_unused_boot_loader_range(addr_t start, addr_t size)
 {
 	VMTranslationMap* map = VMAddressSpace::Kernel()->TranslationMap();
 	addr_t end = start + (size - 1);
@@ -4135,6 +4141,13 @@ vm_init_post_sem(kernel_args* args)
 	// This frees all unused boot loader resources and makes its space available
 	// again
 	arch_vm_init_end(args);
+
+	// Release unused bootloader ranges
+	for(uint32 i = 0 ; i < args->num_virtual_allocated_ranges ; ++i) {
+		free_unused_boot_loader_range(args->virtual_allocated_range[i].start,
+				args->virtual_allocated_range[i].size);
+	}
+
 	unreserve_boot_loader_ranges(args);
 
 	// fill in all of the semaphores that were not allocated before

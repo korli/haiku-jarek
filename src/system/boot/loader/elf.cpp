@@ -21,6 +21,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <kernel/boot/memory.h>
+
 //#define TRACE_ELF
 #ifdef TRACE_ELF
 #	define TRACE(x) dprintf x
@@ -77,19 +79,6 @@ struct ELF32Class {
 	typedef Elf32_Rel				RelType;
 	typedef Elf32_Rela				RelaType;
 
-	static inline status_t
-	AllocateRegion(AddrType* _address, AddrType size, uint8 protection,
-		void** _mappedAddress)
-	{
-		status_t status = platform_allocate_region((void**)_address, size,
-			protection, false);
-		if (status != B_OK)
-			return status;
-
-		*_mappedAddress = (void*)(addr_t)*_address;
-		return B_OK;
-	}
-
 	static inline void*
 	Map(AddrType address)
 	{
@@ -116,50 +105,13 @@ struct ELF64Class {
 	typedef Elf64_Rel				RelType;
 	typedef Elf64_Rela				RelaType;
 
-	static inline status_t
-	AllocateRegion(AddrType* _address, AddrType size, uint8 protection,
-		void **_mappedAddress)
-	{
-#ifdef _BOOT_PLATFORM_EFI
-		void* address = (void*)*_address;
-
-		status_t status = platform_allocate_region(&address, size, protection,
-			false);
-		if (status != B_OK)
-			return status;
-
-		*_mappedAddress = address;
-		platform_bootloader_address_to_kernel_address(address, _address);
-#else
-		// Assume the real 64-bit base address is KERNEL_LOAD_BASE_64_BIT and
-		// the mappings in the loader address space are at KERNEL_LOAD_BASE.
-
-		void* address = (void*)(addr_t)(*_address & 0xffffffff);
-
-		status_t status = platform_allocate_region(&address, size, protection,
-			false);
-		if (status != B_OK)
-			return status;
-
-		*_mappedAddress = address;
-		*_address = (AddrType)(addr_t)address + KERNEL_LOAD_BASE_64_BIT
-			- KERNEL_LOAD_BASE;
-#endif
-		return B_OK;
-	}
-
 	static inline void*
 	Map(AddrType address)
 	{
-#ifdef _BOOT_PLATFORM_EFI
-		void *result;
-		if (platform_kernel_address_to_bootloader_address(address, &result) != B_OK) {
-			panic("Couldn't convert address %#lx", address);
-		}
-		return result;
+#ifdef KERNEL_LOAD_BASE_64_BIT
+		return (void *)(addr_t)(address - KERNEL_LOAD_BASE_64_BIT + KERNEL_LOAD_BASE);
 #else
-		return (void*)(addr_t)(address - KERNEL_LOAD_BASE_64_BIT
-			+ KERNEL_LOAD_BASE);
+		return (void *)(addr_t)address;
 #endif
 	}
 };
@@ -206,9 +158,11 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 {
 	ssize_t length;
 	status_t status;
-	void* mappedRegion = NULL;
 	typename Class::AddrType base_vaddr, base_vlimit, mapsize;
 	int regionIndex = 0;
+	uint64 regionPhysicalAddresses[BOOT_ELF_MAX_REGIONS] = { 0, };
+	void * reservedRegionVirtual;
+	uint64 region_virtual_base;
 
 	ImageType* image = static_cast<ImageType*>(_image);
 	const EhdrType& elfHeader = image->elf_header;
@@ -291,10 +245,41 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 	base_vlimit = image->regions[image->count_regions - 1].start + image->regions[image->count_regions - 1].size;
 	mapsize = base_vlimit - base_vaddr;
 
-	if (Class::AllocateRegion(&base_vaddr, mapsize, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, &mappedRegion) != B_OK) {
-		status = B_NO_MEMORY;
+
+	if(base_vaddr) {
+#ifdef KERNEL_LOAD_BASE_64_BIT
+		if(Class::kIdentClass == ELFCLASS64) {
+			reservedRegionVirtual = (void *)(addr_t)(base_vaddr - KERNEL_LOAD_BASE_64_BIT + KERNEL_LOAD_BASE);
+		} else {
+			reservedRegionVirtual = (void *)(addr_t)base_vaddr;
+		}
+#else
+		reservedRegionVirtual = (void *)(addr_t)base_vaddr;
+#endif
+	} else {
+		reservedRegionVirtual = 0;
+	}
+
+	status = gBootKernelVirtualRegionAllocator.AllocateVirtualMemoryRegion(
+				&reservedRegionVirtual,
+				mapsize,
+				B_PAGE_SIZE,
+				base_vaddr != 0,
+				false);
+
+	if(status != B_OK) {
 		goto error1;
 	}
+
+#ifdef KERNEL_LOAD_BASE_64_BIT
+	if(Class::kIdentClass == ELFCLASS64) {
+		base_vaddr = ((AddrType)(addr_t)reservedRegionVirtual) - KERNEL_LOAD_BASE + KERNEL_LOAD_BASE_64_BIT;
+	} else {
+		base_vaddr = ((AddrType)(addr_t)reservedRegionVirtual);
+	}
+#else
+	base_vaddr = reservedRegionVirtual;
+#endif
 
 	image->regions[0].delta = base_vaddr - image->regions[0].start;
 
@@ -307,6 +292,32 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 			(uint64)image->regions[i].start, (uint64)image->regions[i].size,
 			(int64)(AddrType)image->regions[i].delta));
 
+		status = gBootPhysicalMemoryAllocator->AllocatePhysicalMemory(image->regions[i].size,
+				B_PAGE_SIZE,
+				regionPhysicalAddresses[i]);
+
+		if(status != B_OK) {
+			goto error2;
+		}
+
+#ifdef KERNEL_LOAD_BASE_64_BIT
+		if(Class::kIdentClass == ELFCLASS64) {
+			region_virtual_base = image->regions[i].start - KERNEL_LOAD_BASE_64_BIT + KERNEL_LOAD_BASE;
+		} else {
+			region_virtual_base = image->regions[i].start;
+		}
+#else
+		region_virtual_base = image->regions[i].start;
+#endif
+
+		status = gBootVirtualMemoryMapper->MapVirtualMemoryRegion(region_virtual_base,
+				regionPhysicalAddresses[i],
+				image->regions[i].size,
+				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+
+		if(status != B_OK) {
+			goto error2;
+		}
 	}
 
 	// load program data
@@ -335,12 +346,10 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 			goto error2;
 		}
 
-		// Clear anything above the file size (that may also contain the BSS
-		// area)
-
-		uint32 offset = (header.p_vaddr % B_PAGE_SIZE) + header.p_filesz;
-
-		if (offset < region->size) {
+		if (header.p_filesz != header.p_memsz) {
+			// Clear anything above the file size (that may also contain the BSS
+			// area)
+			uint32 offset = (header.p_vaddr % B_PAGE_SIZE) + header.p_filesz;
 			memset(Class::Map(region->start + offset), 0, region->size - offset);
 		}
 	}
@@ -368,8 +377,16 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 	return B_OK;
 
 error2:
-	if (mappedRegion != NULL)
-		platform_free_region(mappedRegion, mapsize);
+	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
+		if(regionPhysicalAddresses[i]) {
+			gBootPhysicalMemoryAllocator->FreePhysicalMemory(regionPhysicalAddresses[i], image->regions[i].size);
+		} else {
+			break;
+		}
+	}
+
+	gBootKernelVirtualRegionAllocator.ReleaseVirtualMemoryRegion(reservedRegionVirtual, mapsize);
+
 error1:
 	free(programHeaders);
 	kernel_args_free(image);
@@ -383,6 +400,7 @@ template<typename Class>
 ELFLoader<Class>::Relocate(preloaded_image* _image)
 {
 	ImageType* image = static_cast<ImageType*>(_image);
+	uint64 region_virtual_base;
 
 	status_t status = _ParseDynamicSection(image);
 	if (status != B_OK)
@@ -428,7 +446,17 @@ ELFLoader<Class>::Relocate(preloaded_image* _image)
 
 	for (uint32 i = 0 ; i < image->count_regions ; ++i) {
 		if(image->regions[i].protection != (B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA)) {
-			platform_protect_region((void *)(addr_t)image->regions[i].start,
+#ifdef KERNEL_LOAD_BASE_64_BIT
+			if(Class::kIdentClass == ELFCLASS64) {
+				region_virtual_base = image->regions[i].start - KERNEL_LOAD_BASE_64_BIT + KERNEL_LOAD_BASE;
+			} else {
+				region_virtual_base = image->regions[i].start;
+			}
+#else
+			region_virtual_base = image->regions[i].start;
+#endif
+
+			gBootVirtualMemoryMapper->ProtectVirtualMemoryRegion(region_virtual_base,
 					image->regions[i].size,
 					image->regions[i].protection);
 		}

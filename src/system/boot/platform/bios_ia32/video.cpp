@@ -867,14 +867,14 @@ fallback:
 	if (lastBase != 0
 		&& (lastBase != gKernelArgs.frame_buffer.physical_buffer.start
 			|| lastSize < gKernelArgs.frame_buffer.physical_buffer.size)) {
-		mmu_free((void *)sFrameBuffer, lastSize);
+		gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory((void *)sFrameBuffer, lastSize);
 		lastBase = 0;
 	}
 	if (lastBase == 0) {
 		// the graphics memory has not been mapped yet!
-		sFrameBuffer = mmu_map_physical_memory(
+		sFrameBuffer = (addr_t)gBootVirtualMemoryMapper->MapPhysicalLoaderMemory(
 			gKernelArgs.frame_buffer.physical_buffer.start,
-			gKernelArgs.frame_buffer.physical_buffer.size, kDefaultPageFlags);
+			gKernelArgs.frame_buffer.physical_buffer.size);
 	}
 
 	video_display_splash(sFrameBuffer);

@@ -41,9 +41,8 @@
 	// when the drive reading fails for some reason, it will
 	// retry this many times until it will report a failure
 
-.text
+.section .text.head, "ax"
 .code16
-
 /** This is the entry point when we were written directly to a floppy disk */
 
 	jmp		floppy_start
@@ -315,7 +314,7 @@ multiboot_start:
 	// QEMU does not like the real load address...
 	// copy ourselves to the expected location
 	cld
-	mov		$(_end - LOAD_ADDRESS), %ecx
+	mov		$(_edata - LOAD_ADDRESS), %ecx
 	add		$3, %ecx
 	shr		$2, %ecx
 	mov		$LOAD_ADDRESS, %edi
@@ -390,9 +389,9 @@ multiboot_header:
 	.long	OUR_MB_FLAGS
 	.long	(0 - MULTIBOOT_MAGIC - OUR_MB_FLAGS)		// checksum (8 bytes)
 	.long	multiboot_header + MB_LOAD_OFFSET
-	.long	.text + MB_LOAD_OFFSET
-	.long	.bss + (MB_LOAD_OFFSET - 24)
-	.long	_end + (MB_LOAD_OFFSET - 24)
+	.long	__executable_start + MB_LOAD_OFFSET
+	.long	__bss_start + MB_LOAD_OFFSET
+	.long	_end + MB_LOAD_OFFSET
 	.long	multiboot_start + MB_LOAD_OFFSET
 #if (OUR_MB_FLAGS & MULTIBOOT_VIDEO_MODE)
 	.long	0	// non text mode

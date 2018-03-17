@@ -42,6 +42,14 @@ enum {
 	BOOT_METHOD_DEFAULT		= BOOT_METHOD_HARD_DISK
 };
 
+#ifndef MAX_VIRTUAL_FREE_RANGE
+#define MAX_VIRTUAL_FREE_RANGE		(MAX_VIRTUAL_ALLOCATED_RANGE * 3)
+#endif
+
+#ifndef MAX_PHYSICAL_FREE_RANGE
+#define MAX_PHYSICAL_FREE_RANGE		(MAX_PHYSICAL_ALLOCATED_RANGE * 3)
+#endif
+
 typedef struct kernel_args {
 	uint32		kernel_args_size;
 	uint32		version;
@@ -57,6 +65,8 @@ typedef struct kernel_args {
 	addr_range	virtual_allocated_range[MAX_VIRTUAL_ALLOCATED_RANGE];
 	uint32		num_kernel_args_ranges;
 	addr_range	kernel_args_range[MAX_KERNEL_ARGS_RANGE];
+	uint32 		num_virtual_free_ranges;
+	addr_range 	virtual_free_range[MAX_VIRTUAL_FREE_RANGE];
 	uint64		ignored_physical_memory;
 
 	uint32		num_cpus;

@@ -85,10 +85,6 @@ arch_vm_init_end(kernel_args *args)
 				(void*)(range.start + range.size));
 		}
 	}
-
-	// Throw away any address space mappings we've inherited from the boot
-	// loader and have not yet turned into an area.
-	vm_free_unused_boot_loader_range(0, 0xffffffff - B_PAGE_SIZE + 1);
 #endif
 
 #warning M68K: unset TT0 now

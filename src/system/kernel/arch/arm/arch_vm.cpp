@@ -55,9 +55,6 @@ arch_vm_init_post_area(kernel_args *args)
 status_t
 arch_vm_init_end(kernel_args *args)
 {
-	// Throw away all mappings that are unused by the kernel
-	vm_free_unused_boot_loader_range(KERNEL_LOAD_BASE, KERNEL_SIZE);
-
 	return B_OK;
 }
 

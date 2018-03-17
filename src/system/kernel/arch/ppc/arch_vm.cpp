@@ -135,10 +135,6 @@ arch_vm_init_end(kernel_args *args)
 		}
 	}
 
-	// Throw away any address space mappings we've inherited from the boot
-	// loader and have not yet turned into an area.
-	vm_free_unused_boot_loader_range(0, 0xffffffff - B_PAGE_SIZE + 1);
-
 	return B_OK;
 }
 

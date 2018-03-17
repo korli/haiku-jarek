@@ -82,6 +82,7 @@ BootStaticLibrary boot_loader :
 	stdio.cpp
 	vfs.cpp
 	vm.cpp
+	memory.cpp
 
 	# libroot
 	driver_settings.cpp

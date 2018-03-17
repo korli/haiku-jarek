@@ -14,7 +14,7 @@
 #include <kernel.h>
 #include <boot/stage2.h>
 #include <boot/platform.h>
-
+#include <kernel/boot/memory.h>
 
 static const size_t kChunkSize = 16 * B_PAGE_SIZE;
 
@@ -247,25 +247,16 @@ is_address_range_covered(addr_range* ranges, uint32 numRanges, uint64 base,
 	return false;
 }
 
+struct addr_range_less {
+	bool operator ()(const addr_range& left, const addr_range& right) const {
+		return left.start < right.start;
+	}
+};
 
 void
 sort_address_ranges(addr_range* ranges, uint32 numRanges)
 {
-	// TODO: This is a pretty sucky bubble sort implementation!
-	bool done;
-
-	do {
-		done = true;
-		for (uint32 i = 1; i < numRanges; i++) {
-			if (ranges[i].start < ranges[i - 1].start) {
-				done = false;
-				addr_range tempRange;
-				memcpy(&tempRange, &ranges[i], sizeof(addr_range));
-				memcpy(&ranges[i], &ranges[i - 1], sizeof(addr_range));
-				memcpy(&ranges[i - 1], &tempRange, sizeof(addr_range));
-			}
-		}
-	} while (!done);
+	std::sort(ranges, ranges + numRanges, addr_range_less());
 }
 
 
@@ -365,40 +356,80 @@ kernel_args_malloc(size_t size)
 	if (size > kChunkSize / 2 && sFree < size) {
 		// the block is so large, we'll allocate a new block for it
 		void* block = NULL;
-		if (platform_allocate_region(&block, size, B_READ_AREA | B_WRITE_AREA,
-				false) != B_OK) {
+		uint64 physicalAddress = 0;
+
+		status_t error = gBootKernelVirtualRegionAllocator.AllocateVirtualMemoryRegion(&block,
+				ROUNDUP(size, B_PAGE_SIZE),
+				B_PAGE_SIZE,
+				false,
+				true);
+
+		if(error != B_OK) {
 			return NULL;
 		}
 
-#ifdef _BOOT_PLATFORM_EFI
-		uint64 translated_block;
-		platform_bootloader_address_to_kernel_address(block, &translated_block);
-		if (add_kernel_args_range((void *)translated_block, size) != B_OK)
-#else
+		error = gBootPhysicalMemoryAllocator->AllocatePhysicalMemory(ROUNDUP(size, B_PAGE_SIZE),
+					B_PAGE_SIZE,
+					physicalAddress);
+
+		if(error != B_OK) {
+			gBootKernelVirtualRegionAllocator.ReleaseVirtualMemoryRegion(block, ROUNDUP(size, B_PAGE_SIZE));
+			return NULL;
+		}
+
 		if (add_kernel_args_range(block, size) != B_OK)
-#endif
 			panic("kernel_args max range too low!\n");
+
+		error = gBootVirtualMemoryMapper->MapVirtualMemoryRegion((addr_t)block,
+				physicalAddress,
+				ROUNDUP(size, B_PAGE_SIZE),
+				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+
+		if(error != B_OK) {
+			panic("Can't map virtual memory for kernel args");
+		}
+
 		return block;
 	}
 
 	// just allocate a new block and "close" the old one
 	void* block = NULL;
-	if (platform_allocate_region(&block, kChunkSize, B_READ_AREA | B_WRITE_AREA,
-			false) != B_OK) {
+	uint64 physicalAddress = 0;
+
+	status_t error = gBootKernelVirtualRegionAllocator.AllocateVirtualMemoryRegion(&block,
+			kChunkSize,
+			B_PAGE_SIZE,
+			false,
+			true);
+
+	if(error != B_OK) {
 		return NULL;
+	}
+
+	error = gBootPhysicalMemoryAllocator->AllocatePhysicalMemory(kChunkSize,
+				B_PAGE_SIZE,
+				physicalAddress);
+
+	if(error != B_OK) {
+		gBootKernelVirtualRegionAllocator.ReleaseVirtualMemoryRegion(block, kChunkSize);
+		return NULL;
+	}
+
+	if (add_kernel_args_range(block, kChunkSize) != B_OK)
+		panic("kernel_args max range too low!\n");
+
+	error = gBootVirtualMemoryMapper->MapVirtualMemoryRegion((addr_t)block,
+			physicalAddress,
+			kChunkSize,
+			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+
+	if(error != B_OK) {
+		panic("Can't map virtual memory for kernel args");
 	}
 
 	sFirstFree = (void*)((addr_t)block + size);
 	sLast = block;
 	sFree = kChunkSize - size;
-#ifdef _BOOT_PLATFORM_EFI
-	uint64 translated_block;
-	platform_bootloader_address_to_kernel_address(block, &translated_block);
-	if (add_kernel_args_range((void *)translated_block, kChunkSize) != B_OK)
-#else
-	if (add_kernel_args_range(block, kChunkSize) != B_OK)
-#endif
-		panic("kernel_args max range too low!\n");
 
 	return block;
 }

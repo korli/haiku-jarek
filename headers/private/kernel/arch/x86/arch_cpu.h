@@ -178,6 +178,7 @@
 #define IA32_FEATURE_AMD_EXT_NX			(1 << 20) // no execute bit
 #define IA32_FEATURE_AMD_EXT_MMXEXT		(1 << 22) // mmx extensions
 #define IA32_FEATURE_AMD_EXT_FFXSR		(1 << 25) // fast FXSAVE/FXRSTOR
+#define IA32_FEATURE_AMD_EXT_PAGE1GB	(1 << 26) // 1GB TLB entries
 #define IA32_FEATURE_AMD_EXT_RDTSCP		(1 << 27) // rdtscp instruction
 #define IA32_FEATURE_AMD_EXT_LONG		(1 << 29) // long mode
 #define IA32_FEATURE_AMD_EXT_3DNOWEXT	(1 << 30) // 3DNow! extensions
@@ -188,7 +189,8 @@
 #define IA32_FEATURES_INTEL_EXT			(IA32_FEATURE_AMD_EXT_SYSCALL		\
 											| IA32_FEATURE_AMD_EXT_NX		\
 											| IA32_FEATURE_AMD_EXT_RDTSCP	\
-											| IA32_FEATURE_AMD_EXT_LONG)
+											| IA32_FEATURE_AMD_EXT_LONG		\
+											| IA32_FEATURE_AMD_EXT_PAGE1GB)
 
 // x86 defined features from cpuid eax 5, ecx register
 #define IA32_FEATURE_POWER_MWAIT		(1 << 0)

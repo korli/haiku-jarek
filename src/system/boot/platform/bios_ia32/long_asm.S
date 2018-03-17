@@ -88,6 +88,8 @@ FUNCTION(long_enter_kernel):
 	movq	gLongKernelEntry(%rip), %rax
 	call	*%rax
 
+.code32
+.size long_enter_kernel, . - long_enter_kernel
 	
 .data
 

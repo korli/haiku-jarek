@@ -33,8 +33,10 @@
 
 
 // GCC defined globals
-extern void (*__ctor_list)(void);
-extern void (*__ctor_end)(void);
+extern void (*__preinit_array_start[])();
+extern void (*__preinit_array_end[])();
+extern void (*__init_array_start[])();
+extern void (*__init_array_end[])();
 extern uint8 __bss_start;
 extern uint8 _end;
 
@@ -52,13 +54,21 @@ clear_bss(void)
 }
 
 
-static void
-call_ctors(void)
-{
-	void (**f)(void);
+static void call_ctors(void) {
+	void (*fn)(void);
+	size_t array_size, n;
 
-	for (f = &__ctor_list; f < &__ctor_end; f++) {
-		(**f)();
+	array_size = __preinit_array_end - __preinit_array_start;
+	for (n = 0; n < array_size; n++) {
+		fn = __preinit_array_start[n];
+		if ((uintptr_t) fn != 0 && (uintptr_t) fn != 1)
+			fn();
+	}
+	array_size = __init_array_end - __init_array_start;
+	for (n = 0; n < array_size; n++) {
+		fn = __init_array_start[n];
+		if ((uintptr_t) fn != 0 && (uintptr_t) fn != 1)
+			fn();
 	}
 }
 
@@ -139,6 +149,10 @@ platform_start_kernel(void)
 
 	smp_init_other_cpus();
 	debug_cleanup();
+
+	gBootPhysicalMemoryAllocator->GenerateKernelArguments();
+	gBootKernelVirtualRegionAllocator.GenerateKernelArguments();
+
 	mmu_init_for_kernel();
 
 	// We're about to enter the kernel -- disable console output.

@@ -462,6 +462,8 @@ dump_feature_string(int currentCPU, cpu_ent* cpu)
 		strlcat(features, "mmxext ", sizeof(features));
 	if (cpu->arch.feature[FEATURE_EXT_AMD] & IA32_FEATURE_AMD_EXT_FFXSR)
 		strlcat(features, "ffxsr ", sizeof(features));
+	if (cpu->arch.feature[FEATURE_EXT_AMD] & IA32_FEATURE_AMD_EXT_PAGE1GB)
+		strlcat(features, "page1gb ", sizeof(features));
 	if (cpu->arch.feature[FEATURE_EXT_AMD] & IA32_FEATURE_AMD_EXT_LONG)
 		strlcat(features, "long ", sizeof(features));
 	if (cpu->arch.feature[FEATURE_EXT_AMD] & IA32_FEATURE_AMD_EXT_3DNOWEXT)

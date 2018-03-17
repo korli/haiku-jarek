@@ -17,7 +17,8 @@
 #include <boot/platform.h>
 #include <util/OpenHashTable.h>
 #include <util/SplayTree.h>
-
+#include <kernel/boot/memory.h>
+#include <kernel/kernel.h>
 
 //#define TRACE_HEAP
 #ifdef TRACE_HEAP
@@ -181,14 +182,25 @@ struct LargeAllocation {
 
 	status_t Allocate(size_t size)
 	{
-		fSize = size;
-		return platform_allocate_region(&fAddress, fSize,
-			B_READ_AREA | B_WRITE_AREA, false);
+		fSize = ROUNDUP(size, B_PAGE_SIZE);
+
+		status_t error = gBootPhysicalMemoryAllocator->AllocatePhysicalMemory(size,
+				B_PAGE_SIZE,
+				fPhysicalAddress);
+
+		if(error != B_OK) {
+			return error;
+		}
+
+		fAddress = gBootVirtualMemoryMapper->MapPhysicalLoaderMemory(fPhysicalAddress, size, true);
+
+		return B_OK;
 	}
 
 	void Free()
 	{
-		platform_free_region(fAddress, fSize);
+		gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(fAddress, fSize);
+		gBootPhysicalMemoryAllocator->FreePhysicalMemory(fPhysicalAddress, fSize);
 	}
 
 	void* Address() const
@@ -210,6 +222,7 @@ private:
 	void*				fAddress;
 	size_t				fSize;
 	LargeAllocation*	fHashNext;
+	uint64				fPhysicalAddress;
 };
 
 
@@ -380,11 +393,12 @@ FreeChunk::SetToAllocated(void* allocated)
 
 //	#pragma mark -
 
+static LargeAllocation sHeapAllocation;
 
 void
 heap_release(stage2_args* args)
 {
-	platform_release_heap(args, sHeapBase);
+	sHeapAllocation.Free();
 }
 
 
@@ -401,18 +415,20 @@ heap_print_statistics()
 status_t
 heap_init(stage2_args* args)
 {
-	void* base;
-	void* top;
-	if (platform_init_heap(args, &base, &top) < B_OK)
-		return B_ERROR;
+	// Allocate boot loader heap memory
+	status_t error = sHeapAllocation.Allocate(B_PAGE_SIZE * 0x2000);
 
-	sHeapBase = base;
-	sHeapEnd = top;
-	sMaxHeapSize = (uint8*)top - (uint8*)base;
+	if(error != B_OK) {
+		return error;
+	}
+
+	sHeapBase = sHeapAllocation.Address();
+	sHeapEnd = (void *)((addr_t)sHeapBase + sHeapAllocation.Size());
+	sMaxHeapSize = sHeapAllocation.Size();
 
 	// declare the whole heap as one chunk, and add it
 	// to the free list
-	FreeChunk* chunk = (FreeChunk*)base;
+	FreeChunk* chunk = (FreeChunk*)sHeapBase;
 	chunk->SetTo(sMaxHeapSize);
 	sFreeChunkTree.Insert(chunk);
 

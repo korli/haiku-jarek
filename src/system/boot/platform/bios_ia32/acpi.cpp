@@ -19,7 +19,6 @@
 
 #include <arch/x86/arch_acpi.h>
 
-
 //#define TRACE_ACPI
 #ifdef TRACE_ACPI
 #	define TRACE(x) dprintf x
@@ -96,11 +95,11 @@ acpi_check_rsdt(acpi_rsdp* rsdp)
 	acpi_descriptor_header* rsdt = NULL;
 	if (rsdp->revision > 0) {
 		length = rsdp->xsdt_length;
-		rsdt = (acpi_descriptor_header*)mmu_map_physical_memory(
-			(uint32)rsdp->xsdt_address, rsdp->xsdt_length, kDefaultPageFlags);
+		rsdt = (acpi_descriptor_header*)gBootVirtualMemoryMapper->MapPhysicalLoaderMemory(
+			(uint32)rsdp->xsdt_address, rsdp->xsdt_length, true);
 		if (rsdt != NULL
 			&& strncmp(rsdt->signature, ACPI_XSDT_SIGNATURE, 4) != 0) {
-			mmu_free(rsdt, rsdp->xsdt_length);
+			gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(rsdt, rsdp->xsdt_length);
 			rsdt = NULL;
 			TRACE(("acpi: invalid extended system description table\n"));
 		} else
@@ -111,15 +110,14 @@ acpi_check_rsdt(acpi_rsdp* rsdp)
 	// attempt to use the RSDT instead.
 	if (rsdt == NULL) {
 		// map and validate the root system description table
-		rsdt = (acpi_descriptor_header*)mmu_map_physical_memory(
-			rsdp->rsdt_address, sizeof(acpi_descriptor_header),
-			kDefaultPageFlags);
+		rsdt = (acpi_descriptor_header*)gBootVirtualMemoryMapper->MapPhysicalLoaderMemory(
+			rsdp->rsdt_address, sizeof(acpi_descriptor_header), true);
 		if (rsdt == NULL) {
 			TRACE(("acpi: couldn't map rsdt header\n"));
 			return B_ERROR;
 		}
 		if (strncmp(rsdt->signature, ACPI_RSDT_SIGNATURE, 4) != 0) {
-			mmu_free(rsdt, sizeof(acpi_descriptor_header));
+			gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(rsdt, sizeof(acpi_descriptor_header));
 			rsdt = NULL;
 			TRACE(("acpi: invalid root system description table\n"));
 			return B_ERROR;
@@ -128,15 +126,15 @@ acpi_check_rsdt(acpi_rsdp* rsdp)
 		length = rsdt->length;
 		// Map the whole table, not just the header
 		TRACE(("acpi: rsdt length: %lu\n", length));
-		mmu_free(rsdt, sizeof(acpi_descriptor_header));
-		rsdt = (acpi_descriptor_header*)mmu_map_physical_memory(
-			rsdp->rsdt_address, length, kDefaultPageFlags);
+		gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(rsdt, sizeof(acpi_descriptor_header));
+		rsdt = (acpi_descriptor_header*)gBootVirtualMemoryMapper->MapPhysicalLoaderMemory(
+			rsdp->rsdt_address, length, true);
 	}
 
 	if (rsdt != NULL) {
 		if (acpi_validate_rsdt(rsdt) != B_OK) {
 			TRACE(("acpi: rsdt failed checksum validation\n"));
-			mmu_free(rsdt, length);
+			gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(rsdt, length);
 			return B_ERROR;
 		} else {
 			if (usingXsdt)
@@ -182,8 +180,8 @@ acpi_find_table_generic(const char* signature, acpi_descriptor_header* acpiSdt)
 	acpi_descriptor_header* header = NULL;
 	for (int32 j = 0; j < sNumEntries; j++, pointer++) {
 		header = (acpi_descriptor_header*)
-			mmu_map_physical_memory((uint32)*pointer,
-				sizeof(acpi_descriptor_header), kDefaultPageFlags);
+		gBootVirtualMemoryMapper->MapPhysicalLoaderMemory((uint32)*pointer,
+				sizeof(acpi_descriptor_header), true);
 
 		if (header == NULL
 			|| strncmp(header->signature, signature, 4) != 0) {
@@ -192,7 +190,7 @@ acpi_find_table_generic(const char* signature, acpi_descriptor_header* acpiSdt)
 				signature, header != NULL ? header->signature : "null"));
 
 			if (header != NULL) {
-				mmu_free(header, sizeof(acpi_descriptor_header));
+				gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(header, sizeof(acpi_descriptor_header));
 				header = NULL;
 			}
 
@@ -209,10 +207,10 @@ acpi_find_table_generic(const char* signature, acpi_descriptor_header* acpiSdt)
 
 	// Map the whole table, not just the header
 	uint32 length = header->length;
-	mmu_free(header, sizeof(acpi_descriptor_header));
+	gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(header, sizeof(acpi_descriptor_header));
 
-	return (acpi_descriptor_header*)mmu_map_physical_memory(
-		(uint32)*pointer, length, kDefaultPageFlags);
+	return (acpi_descriptor_header*)gBootVirtualMemoryMapper->MapPhysicalLoaderMemory(
+		(uint32)*pointer, length, true);
 }
 
 

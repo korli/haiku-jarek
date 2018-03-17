@@ -43,12 +43,10 @@ using std::nothrow;
 
 namespace TarFS {
 
-
 struct RegionDelete {
 	inline void operator()(void* memory)
 	{
-		if (memory != NULL)
-			platform_free_region(memory, kTarRegionSize);
+		free(memory);
 	}
 };
 
@@ -795,8 +793,8 @@ TarFS::Volume::_Inflate(boot::Partition* partition, void* cookie, off_t offset,
 
 			if (!out) {
 				// allocate memory for the uncompressed data
-				if (platform_allocate_region((void**)&out, kTarRegionSize,
-						B_READ_AREA | B_WRITE_AREA, false) != B_OK) {
+				out = (char *)malloc(kTarRegionSize);
+				if (!out) {
 					TRACE(("tarfs: allocating region failed!\n"));
 					return B_NO_MEMORY;
 				}

@@ -398,8 +398,8 @@ smp_init_other_cpus(void)
 		(void *)gKernelArgs.arch_args.ioapic_phys));
 
 	// map in the apic
-	gKernelArgs.arch_args.apic = (void *)mmu_map_physical_memory(
-		gKernelArgs.arch_args.apic_phys, B_PAGE_SIZE, kDefaultPageFlags);
+	gKernelArgs.arch_args.apic = (void *)gBootVirtualMemoryMapper->MapPhysicalKernelMemory(
+		gKernelArgs.arch_args.apic_phys, B_PAGE_SIZE);
 
 	TRACE(("smp: apic (mapped) = %p\n", (void *)gKernelArgs.arch_args.apic));
 
@@ -410,11 +410,25 @@ smp_init_other_cpus(void)
 		return;
 
 	for (uint32 i = 1; i < gKernelArgs.num_cpus; i++) {
+		uint64 stackPhysicalAddress = 0;
+		gBootPhysicalMemoryAllocator->AllocatePhysicalMemory(KERNEL_STACK_SIZE, B_PAGE_SIZE, stackPhysicalAddress);
+
+		void * stackVirtualAddress = NULL;
+
+		gBootKernelVirtualRegionAllocator.AllocateVirtualMemoryRegion(&stackVirtualAddress,
+				KERNEL_STACK_SIZE + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE,
+				B_PAGE_SIZE,
+				false,
+				true);
+
+		gBootVirtualMemoryMapper->MapVirtualMemoryRegion((addr_t)stackVirtualAddress + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE,
+				stackPhysicalAddress,
+				KERNEL_STACK_SIZE,
+				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+
 		// create a final stack the trampoline code will put the ap processor on
-		gKernelArgs.cpu_kstack[i].start = (addr_t)mmu_allocate(NULL,
-			KERNEL_STACK_SIZE + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE);
-		gKernelArgs.cpu_kstack[i].size = KERNEL_STACK_SIZE
-			+ KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE;
+		gKernelArgs.cpu_kstack[i].start = (addr_t)stackVirtualAddress;
+		gKernelArgs.cpu_kstack[i].size = KERNEL_STACK_SIZE + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE;
 	}
 }
 

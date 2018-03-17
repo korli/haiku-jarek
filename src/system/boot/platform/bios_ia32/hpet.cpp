@@ -51,6 +51,6 @@ hpet_init(void)
 	TRACE(("hpet_init: found HPET at 0x%" B_PRIx64 ".\n",
 		hpet->hpet_address.address));
 	gKernelArgs.arch_args.hpet_phys = hpet->hpet_address.address;
-	gKernelArgs.arch_args.hpet = (void *)mmu_map_physical_memory(
-		gKernelArgs.arch_args.hpet_phys, B_PAGE_SIZE, kDefaultPageFlags);
+	gKernelArgs.arch_args.hpet = (void *)gBootVirtualMemoryMapper->MapPhysicalKernelMemory(
+		gKernelArgs.arch_args.hpet_phys, B_PAGE_SIZE);
 }

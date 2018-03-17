@@ -13,6 +13,7 @@
 #include <boot/stdio.h>
 #include <kernel.h>
 #include <util/ring_buffer.h>
+#include <kernel/boot/memory.h>
 
 #include "keyboard.h"
 #include "mmu.h"
@@ -142,16 +143,42 @@ kprintf(const char *format, ...)
 void
 debug_init_post_mmu(void)
 {
-	// allocate 1 MB memory at 63 MB
-	addr_t base = 63 * 1024 * 1024;
 	size_t size = 1024 * 1024;
-	if (!mmu_allocate_physical(base, size))
+	uint64 physicalBase;
+
+	// Allocate physical memory
+	status_t error = gBootPhysicalMemoryAllocator->AllocatePhysicalMemory(
+			size,
+			B_PAGE_SIZE,
+			physicalBase);
+
+	if(error != B_OK)
 		return;
 
-	void* buffer = (void*)mmu_map_physical_memory(base, size,
-		kDefaultPageFlags);
-	if (buffer == NULL)
-		return;
+
+	// Allocate virtual region
+	void * virtualBase = NULL;
+	error = gBootKernelVirtualRegionAllocator.AllocateVirtualMemoryRegion(
+			&virtualBase,
+			size,
+			B_PAGE_SIZE,
+			false,
+			true);
+
+	if(error != B_OK) {
+		panic("Virtual address space exhausted");
+	}
+
+	error = gBootVirtualMemoryMapper->MapVirtualMemoryRegion((addr_t)virtualBase,
+				physicalBase,
+				size,
+				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+
+	if(error != B_OK) {
+		panic("Can't remap memory for log buffer");
+	}
+
+	void * buffer = (void *)(addr_t)virtualBase;
 
 	// check whether there's a previous syslog we can recover
 	size_t signatureLength = strlen(kDebugSyslogSignature);
