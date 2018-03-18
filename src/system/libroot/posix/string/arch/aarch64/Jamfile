@@ -10,14 +10,8 @@ for architectureObject in [ MultiArchSubDirSetup aarch64 ] {
 		SEARCH_SOURCE += [ FDirName $(SUBDIR) $(DOTDOT) generic ] ;
 
 		MergeObject <$(architecture)>posix_string_arch_$(TARGET_ARCH).o :
-			memcmp.S
 			memcpy.S
-			memmove.S
 			memset.S
-			strcmp.S
-			strlen.S
-			strncmp.S
-			strnlen.S
 			;
 	}
 }
