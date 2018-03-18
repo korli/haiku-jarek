@@ -11,7 +11,10 @@
 #endif
 
 typedef struct {
-	int			nothing_yet;
+	phys_addr_t				pgdir_phys;
+	void *					pgdir_vir;
+	void *					dtb_base;
+	size_t					dtb_size;
 } arch_kernel_args;
 
 #endif /* _KERNEL_ARCH_AARCH64_ARCH_KERNEL_ARGS_H_ */
