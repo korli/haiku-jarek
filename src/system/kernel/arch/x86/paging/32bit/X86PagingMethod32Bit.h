@@ -36,10 +36,6 @@ public:
 	virtual	bool				IsKernelPageAccessible(addr_t virtualAddress,
 									uint32 protection);
 
-	inline	page_table_entry*	PageHole() const
-									{ return fPageHole; }
-	inline	page_directory_entry* PageHolePageDir() const
-									{ return fPageHolePageDir; }
 	inline	uint32				KernelPhysicalPageDirectory() const
 									{ return fKernelPhysicalPageDirectory; }
 	inline	page_directory_entry* KernelVirtualPageDirectory() const
@@ -83,14 +79,11 @@ private:
 	inline	int32				_GetInitialPoolCount();
 
 	static	void				_EarlyPreparePageTables(
-									page_table_entry* pageTables,
+									kernel_args* args, page_table_entry* pageTables,
 									addr_t address, size_t size);
-	static	status_t			_EarlyQuery(addr_t virtualAddress,
+	static	status_t			_EarlyQuery(kernel_args* args,addr_t virtualAddress,
 									phys_addr_t *_physicalAddress);
-
 private:
-			page_table_entry*	fPageHole;
-			page_directory_entry* fPageHolePageDir;
 			uint32				fKernelPhysicalPageDirectory;
 			page_directory_entry* fKernelVirtualPageDirectory;
 

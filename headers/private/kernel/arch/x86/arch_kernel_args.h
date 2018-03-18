@@ -24,6 +24,7 @@ typedef struct {
 	uint64	cpu_clock_speed;
 	uint32	phys_pgdir;
 	uint64	vir_pgdir;
+	uint64  vir_memory_remap;
 	// smp stuff
 	uint32	apic_time_cv_factor; // apic ticks per second
 	uint32	apic_phys;

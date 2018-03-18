@@ -64,12 +64,10 @@ struct X86PagingMethodPAE::ToPAESwitcher {
 	{
 		// page hole set up in the boot loader
 		fPageHole = (page_table_entry*)
-			(addr_t)fKernelArgs->arch_args.page_hole;
+			(addr_t)fKernelArgs->arch_args.vir_memory_remap;
 
 		// calculate where the page dir would be
-		fPageHolePageDir = (page_directory_entry*)
-			(((addr_t)fKernelArgs->arch_args.page_hole)
-				+ (B_PAGE_SIZE * 1024 - B_PAGE_SIZE));
+		fPageHolePageDir = (page_directory_entry*)(addr_t)fKernelArgs->arch_args.vir_pgdir;
 
 		fPhysicalPageDir = fKernelArgs->arch_args.phys_pgdir;
 
@@ -239,20 +237,27 @@ private:
 
 		// allocate pages for the 32 bit page tables and prepare the tables
 		uint32 oldPageTableCount = virtualSize / B_PAGE_SIZE / 1024;
+
+		ASSERT(oldPageTableCount <= 1023);
+
 		for (uint32 i = 0; i < oldPageTableCount; i++) {
 			// allocate a page
 			phys_addr_t physicalTable =_AllocatePage32Bit();
 
+			// remap the early table
+			fPageHole[1 + i] = physicalTable | 3;
+
+			invalidate_TLB(((addr_t)fPageHole) + B_PAGE_SIZE * (i + 1));
+
+			// clear the early table
+			memset((void *)(((addr_t)fPageHole) + B_PAGE_SIZE * (i + 1)), 0, B_PAGE_SIZE);
+
 			// put the page into the page dir
 			page_directory_entry* entry = &fPageHolePageDir[
 				virtualBase / B_PAGE_SIZE / 1024 + i];
+
 			X86PagingMethod32Bit::PutPageTableInPageDir(entry, physicalTable,
 				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
-
-			// clear the table
-			memset((void*)((addr_t)fPageHole
-					+ (virtualBase / B_PAGE_SIZE / 1024 + i) * B_PAGE_SIZE),
-				0, B_PAGE_SIZE);
 		}
 
 		// We don't need a physical page for the free virtual slot.
@@ -264,7 +269,7 @@ private:
 			phys_addr_t physicalAddress =_AllocatePage32Bit();
 
 			// put the page into the page table
-			page_table_entry* entry = fPageHole + virtualBase / B_PAGE_SIZE + i;
+			page_table_entry* entry = fPageHole + virtualBase / B_PAGE_SIZE + i + 1;
 			X86PagingMethod32Bit::PutPageTableEntryInTable(entry,
 				physicalAddress, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, 0,
 				true);

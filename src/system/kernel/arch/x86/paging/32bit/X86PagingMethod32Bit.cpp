@@ -108,7 +108,7 @@ X86PagingMethod32Bit::PhysicalPageSlotPool::InitInitial(kernel_args* args)
 	}
 
 	// prepare the page table
-	_EarlyPreparePageTables(pageTable, virtualBase, 1024 * B_PAGE_SIZE);
+	_EarlyPreparePageTables(args, pageTable, virtualBase, 1024 * B_PAGE_SIZE);
 
 	// init the pool structure and add the initial pool
 	Init(-1, pageTable, -1, (addr_t)virtualBase);
@@ -255,8 +255,6 @@ X86PagingMethod32Bit::PhysicalPageSlotPool::AllocatePool(
 
 X86PagingMethod32Bit::X86PagingMethod32Bit()
 	:
-	fPageHole(NULL),
-	fPageHolePageDir(NULL),
 	fKernelPhysicalPageDirectory(0),
 	fKernelVirtualPageDirectory(NULL),
 	fPhysicalPageMapper(NULL),
@@ -276,22 +274,11 @@ X86PagingMethod32Bit::Init(kernel_args* args,
 {
 	TRACE("X86PagingMethod32Bit::Init(): entry\n");
 
-	// page hole set up in stage2
-	fPageHole = (page_table_entry*)(addr_t)args->arch_args.page_hole;
-	// calculate where the pgdir would be
-	fPageHolePageDir = (page_directory_entry*)
-		(((addr_t)args->arch_args.page_hole)
-			+ (B_PAGE_SIZE * 1024 - B_PAGE_SIZE));
-	// clear out the bottom 2 GB, unmap everything
-	memset(fPageHolePageDir + FIRST_USER_PGDIR_ENT, 0,
-		sizeof(page_directory_entry) * NUM_USER_PGDIR_ENTS);
-
 	fKernelPhysicalPageDirectory = args->arch_args.phys_pgdir;
 	fKernelVirtualPageDirectory = (page_directory_entry*)(addr_t)
 		args->arch_args.vir_pgdir;
 
 #ifdef TRACE_X86_PAGING_METHOD_32_BIT
-	TRACE("page hole: %p, page dir: %p\n", fPageHole, fPageHolePageDir);
 	TRACE("page dir: %p (physical: %#" B_PRIx32 ")\n",
 		fKernelVirtualPageDirectory, fKernelPhysicalPageDirectory);
 #endif
@@ -339,11 +326,6 @@ X86PagingMethod32Bit::InitPostArea(kernel_args* args)
 	void *temp;
 	area_id area;
 
-	// unmap the page hole hack we were using before
-	fKernelVirtualPageDirectory[1023] = 0;
-	fPageHolePageDir = NULL;
-	fPageHole = NULL;
-
 	temp = (void*)fKernelVirtualPageDirectory;
 	area = create_area("kernel_pgdir", &temp, B_EXACT_ADDRESS, B_PAGE_SIZE,
 		B_ALREADY_WIRED, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
@@ -385,16 +367,12 @@ X86PagingMethod32Bit::MapEarly(kernel_args* args, addr_t virtualAddress,
 	phys_addr_t physicalAddress, uint8 attributes,
 	page_num_t (*get_free_page)(kernel_args*))
 {
-	// XXX horrible back door to map a page quickly regardless of translation
-	// map object, etc. used only during VM setup.
-	// uses a 'page hole' set up in the stage 2 bootloader. The page hole is
-	// created by pointing one of the pgdir entries back at itself, effectively
-	// mapping the contents of all of the 4MB of pagetables into a 4 MB region.
-	// It's only used here, and is later unmapped.
+	uint32 * remapTable = (uint32 *)(addr_t)args->arch_args.vir_memory_remap;
+	uint32 * level2Table = (uint32 *)((addr_t)args->arch_args.vir_memory_remap + B_PAGE_SIZE);
 
-	// check to see if a page table exists for this range
 	int index = VADDR_TO_PDENT(virtualAddress);
-	if ((fPageHolePageDir[index] & X86_PDE_PRESENT) == 0) {
+
+	if ((fKernelVirtualPageDirectory[index] & X86_PDE_PRESENT) == 0) {
 		phys_addr_t pgtable;
 		page_directory_entry *e;
 		// we need to allocate a pgtable
@@ -406,23 +384,33 @@ X86PagingMethod32Bit::MapEarly(kernel_args* args, addr_t virtualAddress,
 			"pgtable. %#" B_PRIxPHYSADDR "\n", pgtable);
 
 		// put it in the pgdir
-		e = &fPageHolePageDir[index];
+		e = &fKernelVirtualPageDirectory[index];
 		PutPageTableInPageDir(e, pgtable, attributes);
 
+		// Write table remap
+		remapTable[1] = pgtable | X86_PDE_PRESENT | X86_PDE_WRITABLE;
+
+		// Invalidate TLB entry
+		invalidate_TLB(level2Table);
+
 		// zero it out in it's new mapping
-		memset((unsigned int*)((addr_t)fPageHole
-				+ (virtualAddress / B_PAGE_SIZE / 1024) * B_PAGE_SIZE),
-			0, B_PAGE_SIZE);
+		memset(level2Table,	0, B_PAGE_SIZE);
+	} else {
+		uint32 tlb_entry = fKernelVirtualPageDirectory[index] & X86_PDE_ADDRESS_MASK;
+
+		if((remapTable[1] & X86_PDE_ADDRESS_MASK) != tlb_entry) {
+			// Write table remap
+			remapTable[1] = tlb_entry | X86_PDE_PRESENT | X86_PDE_WRITABLE;
+
+			// Invalidate TLB entry
+			invalidate_TLB(level2Table);
+		}
 	}
 
-	ASSERT_PRINT(
-		(fPageHole[virtualAddress / B_PAGE_SIZE] & X86_PTE_PRESENT) == 0,
-		"virtual address: %#" B_PRIxADDR ", pde: %#" B_PRIx32
-		", existing pte: %#" B_PRIx32, virtualAddress, fPageHolePageDir[index],
-		fPageHole[virtualAddress / B_PAGE_SIZE]);
+	ASSERT((level2Table[((virtualAddress / B_PAGE_SIZE) & 1023)] & X86_PTE_PRESENT) == 0);
 
 	// now, fill in the pentry
-	PutPageTableEntryInTable(fPageHole + virtualAddress / B_PAGE_SIZE,
+	PutPageTableEntryInTable(&level2Table[((virtualAddress / B_PAGE_SIZE) & 1023)],
 		physicalAddress, attributes, 0, IS_KERNEL_ADDRESS(virtualAddress));
 
 	return B_OK;
@@ -543,10 +531,12 @@ X86PagingMethod32Bit::_GetInitialPoolCount()
 
 
 /*static*/ void
-X86PagingMethod32Bit::_EarlyPreparePageTables(page_table_entry* pageTables,
+X86PagingMethod32Bit::_EarlyPreparePageTables(kernel_args* args,page_table_entry* pageTables,
 	addr_t address, size_t size)
 {
 	memset(pageTables, 0, B_PAGE_SIZE * (size / (B_PAGE_SIZE * 1024)));
+
+	page_table_entry * pageDirectory = (page_table_entry *)(addr_t)args->arch_args.vir_pgdir;
 
 	// put the array of pgtables directly into the kernel pagedir
 	// these will be wired and kept mapped into virtual space to be easy to get
@@ -554,14 +544,11 @@ X86PagingMethod32Bit::_EarlyPreparePageTables(page_table_entry* pageTables,
 	{
 		addr_t virtualTable = (addr_t)pageTables;
 
-		page_directory_entry* pageHolePageDir
-			= X86PagingMethod32Bit::Method()->PageHolePageDir();
-
 		for (size_t i = 0; i < (size / (B_PAGE_SIZE * 1024));
 				i++, virtualTable += B_PAGE_SIZE) {
 			phys_addr_t physicalTable = 0;
-			_EarlyQuery(virtualTable, &physicalTable);
-			page_directory_entry* entry = &pageHolePageDir[
+			_EarlyQuery(args, virtualTable, &physicalTable);
+			page_directory_entry* entry = &pageDirectory[
 				(address / (B_PAGE_SIZE * 1024)) + i];
 			PutPageTableInPageDir(entry, physicalTable,
 				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
@@ -572,17 +559,25 @@ X86PagingMethod32Bit::_EarlyPreparePageTables(page_table_entry* pageTables,
 
 //! TODO: currently assumes this translation map is active
 /*static*/ status_t
-X86PagingMethod32Bit::_EarlyQuery(addr_t virtualAddress,
+X86PagingMethod32Bit::_EarlyQuery(kernel_args* args,addr_t virtualAddress,
 	phys_addr_t *_physicalAddress)
 {
-	X86PagingMethod32Bit* method = X86PagingMethod32Bit::Method();
-	int index = VADDR_TO_PDENT(virtualAddress);
-	if ((method->PageHolePageDir()[index] & X86_PDE_PRESENT) == 0) {
-		// no pagetable here
-		return B_ERROR;
+	page_table_entry * remapTable = (page_table_entry *)(addr_t)args->arch_args.vir_memory_remap;
+	page_table_entry * level2Table = (page_table_entry *)((addr_t)args->arch_args.vir_memory_remap + B_PAGE_SIZE);
+	page_table_entry * pageDirectory = (page_table_entry *)(addr_t)args->arch_args.vir_pgdir;
+
+	unsigned int level1Index = virtualAddress / (1024 * B_PAGE_SIZE);
+	unsigned int level2Index = (virtualAddress / B_PAGE_SIZE) & 1023;
+
+	if((pageDirectory[level1Index] & X86_PDE_ADDRESS_MASK) != (remapTable[1] & X86_PDE_ADDRESS_MASK)) {
+		remapTable[1] = (pageDirectory[level1Index] & X86_PDE_ADDRESS_MASK) |
+				X86_PDE_PRESENT |
+				X86_PDE_WRITABLE;
+
+		invalidate_TLB(level2Table);
 	}
 
-	page_table_entry* entry = method->PageHole() + virtualAddress / B_PAGE_SIZE;
+	page_table_entry* entry = &level2Table[level2Index];
 	if ((*entry & X86_PTE_PRESENT) == 0) {
 		// page mapping not valid
 		return B_ERROR;

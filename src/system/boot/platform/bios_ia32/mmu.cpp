@@ -355,6 +355,7 @@ init_page_directory(void)
 	TRACE("init_page_directory\n");
 
 	uint64 pageDirectoryPhys = sX86VirtualMapper.get_next_page_table();
+	gKernelArgs.arch_args.phys_pgdir = pageDirectoryPhys;
 
 	// allocate a new pgdir
 	sPageDirectory = (uint32 *)(uint64)pageDirectoryPhys;
@@ -563,6 +564,9 @@ mmu_init(void)
 			B_PAGE_SIZE * 1024, // Align to 4MB
 			false,
 			true);
+
+	// entry [0] points to itself
+	gKernelArgs.arch_args.vir_memory_remap = (addr_t)sPhysicalMapperPageTable;
 
 	init_page_directory();
 
