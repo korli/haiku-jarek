@@ -4,7 +4,7 @@ SetupFeatureObjectsDir $(TARGET_BOOT_PLATFORM) ;
 
 UsePrivateHeaders [ FDirName kernel boot platform $(TARGET_BOOT_PLATFORM) ] ;
 UsePrivateHeaders kernel shared storage support ;
-UseBuildFeatureHeaders zlib ;
+UseLibraryHeaders zlib ;
 
 DEFINES += _BOOT_MODE ;
 
@@ -49,7 +49,3 @@ BootStaticLibrary boot_packagefs :
 	CompressionAlgorithm.cpp
 	ZlibCompressionAlgorithm.cpp
 ;
-
-Includes [ FGristFiles ZlibCompressionAlgorithm.cpp ]
-	: [ BuildFeatureAttribute zlib : headers ] ;
-

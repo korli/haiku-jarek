@@ -2,7 +2,7 @@ SubDir HAIKU_TOP src system boot platform generic ;
 
 SetupFeatureObjectsDir $(TARGET_BOOT_PLATFORM) ;
 
-UseBuildFeatureHeaders zlib ;
+UseLibraryHeaders zlib ;
 UsePrivateKernelHeaders ;
 
 SubDirC++Flags -D_BOOT_MODE -fno-rtti ;
@@ -12,6 +12,3 @@ BootStaticLibrary boot_platform_generic :
 	video_blit.cpp
 	video_splash.cpp
 ;
-
-Includes [ FGristFiles video_splash.cpp ]
-	: [ BuildFeatureAttribute zlib : headers ] ;
