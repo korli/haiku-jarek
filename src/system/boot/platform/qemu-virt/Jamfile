@@ -50,4 +50,7 @@ BootMergeObject boot_platform_qemu-virt.o :
 	:
 	# must come first to have _start_* at correct locations
 	boot_platform_qemu-virt_common.o
+	boot_platform_qemu-virt_$(TARGET_ARCH).o
 ;
+
+SubInclude HAIKU_TOP src system boot platform qemu-virt arch ;
