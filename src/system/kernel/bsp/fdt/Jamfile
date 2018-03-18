@@ -1,0 +1,21 @@
+SubDir HAIKU_TOP src system kernel bsp fdt ;
+
+UsePrivateHeaders shared ;
+
+SubDirSysHdrs $(SUBDIR) libfdt ;
+
+SEARCH_SOURCE += [ FDirName $(SUBDIR) libfdt ] ;
+
+KernelMergeObject kernel_bsp_fdt.o :
+	fdt_addresses.c
+	fdt_empty_tree.c
+	fdt_overlay.c
+	fdt_ro.c
+	fdt_strerror.c
+	fdt_rw.c
+	fdt_sw.c
+	fdt.c
+	fdt_support.cpp
+
+	: $(TARGET_KERNEL_PIC_CCFLAGS)
+;

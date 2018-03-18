@@ -201,6 +201,7 @@ SubInclude HAIKU_TOP src system kernel posix ;
 SubInclude HAIKU_TOP src system kernel slab ;
 SubInclude HAIKU_TOP src system kernel util ;
 SubInclude HAIKU_TOP src system kernel vm ;
+SubInclude HAIKU_TOP src system kernel bsp ;
 
 if $(TARGET_BOOT_PLATFORM) {
 	SubInclude HAIKU_TOP src system kernel platform $(TARGET_BOOT_PLATFORM) ;
