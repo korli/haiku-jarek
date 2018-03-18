@@ -278,7 +278,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		base_vaddr = ((AddrType)(addr_t)reservedRegionVirtual);
 	}
 #else
-	base_vaddr = reservedRegionVirtual;
+	base_vaddr = (addr_t)reservedRegionVirtual;
 #endif
 
 	image->regions[0].delta = base_vaddr - image->regions[0].start;
