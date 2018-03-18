@@ -7,8 +7,15 @@ DEFINES += _BOOT_MODE ;
 BootMergeObject boot_arch_$(TARGET_KERNEL_ARCH).o :
 	memcpy.S
 	memset.S
+	locore.S
+	arch_elf.cpp
+	mmu.cpp
 	: -std=c++11 # additional flags
 ;
 
 SEARCH on [ FGristFiles memcpy.S memset.S ]
     = [ FDirName $(HAIKU_TOP) src system libroot posix string arch aarch64 ] ;
+
+SEARCH on [ FGristFiles arch_elf.cpp $(kernelArchDriverSources) ]
+	= [ FDirName $(HAIKU_TOP) src system kernel arch $(TARGET_KERNEL_ARCH) ] ;
+    

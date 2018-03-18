@@ -12,4 +12,20 @@ _start:
 .section .text
 
 real_start:
+	// We enter via linux boot protocol.
+	// X0 already contains address of DTB
+
+	// Set up initial stack. Contents of .bss is wiped
+	// after call to aarch64_locore_init
+	adr		x1, boot_stack_end
+	mov		sp, x1
+
+	bl		aarch64_locore_init
+
 	b	.
+
+.section .bss
+
+boot_stack_begin:
+	.space		16384
+boot_stack_end:

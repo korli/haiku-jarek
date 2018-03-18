@@ -27,12 +27,7 @@ SubDirSysHdrs [ FDirName $(HAIKU_TOP) src system kernel bsp fdt libfdt ] ;
 
 local libFdtSources =
 	fdt_addresses.c
-	fdt_empty_tree.c
-	fdt_overlay.c
 	fdt_ro.c
-	fdt_strerror.c
-	fdt_rw.c
-	fdt_sw.c
 	fdt.c
 ;
 
@@ -40,7 +35,12 @@ local libFdtSources =
 BootMergeObject boot_platform_qemu-virt_common.o :
 	$(libFdtSources)
 	fdt_support.cpp
-
+	debug.cpp
+	console.cpp
+	devices.cpp
+	menu.cpp
+	start.cpp
+	video.cpp
 	:
 	: boot_platform_generic.a
 ;
