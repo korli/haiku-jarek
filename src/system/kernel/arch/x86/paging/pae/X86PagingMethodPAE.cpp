@@ -68,7 +68,6 @@ struct X86PagingMethodPAE::ToPAESwitcher {
 
 		// calculate where the page dir would be
 		fPageHolePageDir = (page_directory_entry*)(addr_t)fKernelArgs->arch_args.vir_pgdir;
-
 		fPhysicalPageDir = fKernelArgs->arch_args.phys_pgdir;
 
 		TRACE("page hole: %p\n", fPageHole);
@@ -82,10 +81,10 @@ struct X86PagingMethodPAE::ToPAESwitcher {
 		phys_addr_t* physicalPageDirs, addr_t& _freeVirtualSlot,
 		pae_page_table_entry*& _freeVirtualSlotPTE)
 	{
-		// count the page tables we have to translate
+		// Count number of pages needed to map memory
 		uint32 pageTableCount = 0;
-		for (uint32 i = FIRST_KERNEL_PGDIR_ENT;
-			i < FIRST_KERNEL_PGDIR_ENT + NUM_KERNEL_PGDIR_ENTS; i++) {
+		for (uint32 i = FIRST_KERNEL_PGDIR_ENT; i < FIRST_KERNEL_PGDIR_ENT + NUM_KERNEL_PGDIR_ENTS; i++)
+		{
 			page_directory_entry entry = fPageHolePageDir[i];
 			if ((entry & X86_PDE_PRESENT) != 0)
 				pageTableCount++;
@@ -184,7 +183,18 @@ private:
 
 	void _TranslatePageTable(addr_t virtualBase)
 	{
-		page_table_entry* entry = &fPageHole[virtualBase / B_PAGE_SIZE];
+		// Use entry 1023 for table mapping
+
+		page_table_entry table_tlb = fPageHolePageDir[virtualBase / (1024 * B_PAGE_SIZE)];
+		page_table_entry* entry = (page_table_entry *)(((addr_t)fPageHole) + 1023 * B_PAGE_SIZE);
+
+		if((table_tlb & X86_PDE_ADDRESS_MASK) != (fPageHole[1023] & X86_PTE_ADDRESS_MASK)) {
+			fPageHole[1023] = (table_tlb &  X86_PDE_ADDRESS_MASK) | X86_PTE_WRITABLE | X86_PTE_PRESENT;
+			invalidate_TLB(entry);
+		}
+
+		// Adjust for virtual address
+		entry += (virtualBase / B_PAGE_SIZE) & 1023;
 
 		// allocate a PAE page table
 		phys_addr_t physicalTable = 0;
@@ -211,8 +221,9 @@ private:
 					| X86_PTE_CACHING_DISABLED
 					| X86_PTE_GLOBAL
 					| X86_PTE_ADDRESS_MASK);
-			} else
+			} else {
 				*paeEntry = 0;
+			}
 		}
 
 		if (fFreeVirtualSlot / kPAEPageTableRange
@@ -238,6 +249,8 @@ private:
 		// allocate pages for the 32 bit page tables and prepare the tables
 		uint32 oldPageTableCount = virtualSize / B_PAGE_SIZE / 1024;
 
+		TRACE("%" B_PRIu32 " old page tables\n", oldPageTableCount);
+
 		ASSERT(oldPageTableCount <= 1023);
 
 		for (uint32 i = 0; i < oldPageTableCount; i++) {
@@ -245,7 +258,7 @@ private:
 			phys_addr_t physicalTable =_AllocatePage32Bit();
 
 			// remap the early table
-			fPageHole[1 + i] = physicalTable | 3;
+			fPageHole[1 + i] = physicalTable | X86_PTE_PRESENT | X86_PTE_WRITABLE;
 
 			invalidate_TLB(((addr_t)fPageHole) + B_PAGE_SIZE * (i + 1));
 
@@ -260,8 +273,12 @@ private:
 				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
 		}
 
+		TRACE("Old page tables mapped at %p\n", (void *)(((addr_t)fPageHole) + B_PAGE_SIZE));
+
 		// We don't need a physical page for the free virtual slot.
 		pagesNeeded--;
+
+		page_table_entry * l2_base = (page_table_entry *)(((addr_t)fPageHole) + B_PAGE_SIZE);
 
 		// allocate and map the pages we need
 		for (uint32 i = 0; i < pagesNeeded; i++) {
@@ -269,15 +286,22 @@ private:
 			phys_addr_t physicalAddress =_AllocatePage32Bit();
 
 			// put the page into the page table
-			page_table_entry* entry = fPageHole + virtualBase / B_PAGE_SIZE + i + 1;
+			page_table_entry* entry = l2_base + i;
+
+			TRACE("Put entry at %p for %" B_PRIxPHYSADDR "\n", entry, physicalAddress);
+
 			X86PagingMethod32Bit::PutPageTableEntryInTable(entry,
 				physicalAddress, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, 0,
 				true);
+
+			invalidate_TLB(virtualBase + i * B_PAGE_SIZE);
 
 			// Write the page's physical address into the page itself, so we
 			// don't need to look it up later.
 			*(phys_addr_t*)(virtualBase + i * B_PAGE_SIZE) = physicalAddress;
 		}
+
+		TRACE("All entries allocated\n");
 
 		fAllocatedPages = (uint8*)virtualBase;
 		fAllocatedPagesCount = pagesNeeded;
