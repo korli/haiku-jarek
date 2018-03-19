@@ -7,6 +7,7 @@
 #define PRIVATE_KERNEL_BOOT_PLATFORM_QEMU_VIRT_PLATFORM_STAGE2_ARGS_H_
 
 struct platform_stage2_args {
+	const void * fdt_phys;
 };
 
 #endif /* PRIVATE_KERNEL_BOOT_PLATFORM_QEMU_VIRT_PLATFORM_STAGE2_ARGS_H_ */

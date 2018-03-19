@@ -71,7 +71,7 @@ UsePrivateHeaders shared storage ;
 	local kernelC++Header = [ FDirName $(HAIKU_TOP) headers private kernel util
 		kernel_cpp.h ] ;
 
-	SubDirC++Flags -fno-rtti -include $(kernelC++Header) ;
+	SubDirC++Flags -fno-rtti -include $(kernelC++Header) -g -O0 ;
 }
 
 

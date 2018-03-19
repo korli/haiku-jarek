@@ -25,7 +25,7 @@ real_start:
 	b		aarch64_locore_init
 1:
 
-
+	bl		_plat_start
 	b	.
 
 .section .bss

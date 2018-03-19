@@ -25,4 +25,7 @@
 #define DMAP_BASE		0xfffffd0000000000UL
 #define DMAP_END		0xffffff0000000000UL
 
+#define UMAP_BASE		0xfffffa0000000000UL
+#define UMAP_END		0xfffffd0000000000UL
+
 #endif /* _KERNEL_ARCH_AARCH64_ARCH_KERNEL_H_ */

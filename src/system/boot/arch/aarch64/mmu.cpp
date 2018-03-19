@@ -18,6 +18,7 @@
 #include <kernel/arch/aarch64/arch_vm_translation_map.h>
 #include <drivers/KernelExport.h>
 #include <system/vm_defs.h>
+#include <kernel/boot/stage2.h>
 
 extern "C" {
 #include "libfdt.h"
@@ -37,6 +38,21 @@ uint64 gAArch64PageDirectoryPhysicalTTBR1 = 1;
 struct DirectPhysicalTranslator {
 	static unsigned long ToVirtual(phys_addr_t addr) {
 		return addr;
+	}
+};
+
+class PageTablePhysicalMemoryMapperDMAP final : public PhysicalMemoryMapper {
+public:
+	virtual void * MapPhysicalPage(uint64 physicalAddress) override final {
+		return (void *)(DMAP_BASE + physicalAddress);
+	}
+};
+
+static PageTablePhysicalMemoryMapperDMAP sPageTableTranslatorAArch64;
+
+struct DMAPPhysicalTranslator {
+	static unsigned long ToVirtual(phys_addr_t addr) {
+		return (unsigned long)sPageTableTranslatorAArch64.MapPhysicalPage(addr);
 	}
 };
 
@@ -87,7 +103,7 @@ template<typename _Translator> void aarch64_level3_remap(
 	}
 }
 
-template<typename _Translator> int aarch64_level2_remap(
+template<typename _Translator> status_t aarch64_level2_remap(
 			BlockPhysicalMemoryAllocator * allocator,
 			uint64 * level2,
 			unsigned long& virtualAddress,
@@ -171,7 +187,7 @@ template<typename _Translator> int aarch64_level2_remap(
 	return 0;
 }
 
-template<typename _Translator> int aarch64_level1_remap(
+template<typename _Translator> status_t aarch64_level1_remap(
 			BlockPhysicalMemoryAllocator * allocator,
 			uint64 * level1,
 			unsigned long& virtualAddress,
@@ -244,7 +260,7 @@ template<typename _Translator> int aarch64_level1_remap(
 			l2 = (uint64 *)_Translator::ToVirtual(entry & ~ATTR_MASK);
 		}
 
-		int error = aarch64_level2_remap<_Translator>(allocator,
+		status_t error = aarch64_level2_remap<_Translator>(allocator,
 				l2,
 				virtualAddress,
 				physicalAddress,
@@ -260,7 +276,7 @@ template<typename _Translator> int aarch64_level1_remap(
 	return 0;
 }
 
-template<typename _Translator> int aarch64_level0_remap(
+template<typename _Translator> status_t aarch64_level0_remap(
 			BlockPhysicalMemoryAllocator * allocator,
 			uint64 * level0,
 			unsigned long virtualAddress,
@@ -296,7 +312,7 @@ template<typename _Translator> int aarch64_level0_remap(
 			l1 = (uint64 *)_Translator::ToVirtual(level0[l0_index] & ~ATTR_MASK);
 		}
 
-		int error = aarch64_level1_remap<_Translator>(allocator,
+		status_t error = aarch64_level1_remap<_Translator>(allocator,
 				l1,
 				virtualAddress,
 				physicalAddress,
@@ -311,6 +327,369 @@ template<typename _Translator> int aarch64_level0_remap(
 	return 0;
 }
 
+static void aarch64_level3_unmap(uint64 * level3,
+	unsigned long& virtualAddress,
+	size_t& size)
+{
+	for(int l3_index = pmap_l3_index(virtualAddress) ;
+			l3_index < Ln_ENTRIES && size > 0 ;
+			++l3_index)
+	{
+		level3[l3_index] = 0;
+		size -= B_PAGE_SIZE;
+		virtualAddress += B_PAGE_SIZE;
+	}
+}
+
+static status_t aarch64_level2_unmap(uint64 * level2,
+	unsigned long& virtualAddress,
+	size_t& size)
+{
+	auto allocator = static_cast<BlockPhysicalMemoryAllocator *>(gBootPhysicalMemoryAllocator);
+
+	for(int l2_index = pmap_l2_index(virtualAddress) ;
+			l2_index < Ln_ENTRIES && size > 0 ;
+			++l2_index)
+	{
+		uint64 entry = level2[l2_index];
+		uint64 * l3;
+
+		if((entry & ATTR_DESCR_MASK) == L2_BLOCK) {
+			// Existing block. Check if we need to promote the mapping
+
+			if(!(virtualAddress & L2_OFFSET) && (size >= L2_SIZE))
+			{
+				// Just update
+				level2[l2_index] = 0;
+				size -= L2_SIZE;
+				virtualAddress += L2_SIZE;
+				continue;
+			}
+
+			// We need to expand the table
+			int error = aarch64_promote_mapping<DMAPPhysicalTranslator>(&level2[l2_index],
+					allocator,
+					L3_SIZE,
+					L3_PAGE);
+
+			if(error < 0) {
+				return error;
+			}
+
+			l3 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(level2[l2_index] & ~ATTR_MASK);
+		} else if((entry & ATTR_DESCR_MASK) != L2_TABLE) {
+			// If we can use the block mapping, use it
+			if(!(virtualAddress & L2_OFFSET) &&
+			   (size >= L2_SIZE))
+			{
+				// Just update
+				level2[l2_index] = 0;
+				size -= L2_SIZE;
+				virtualAddress += L2_SIZE;
+				continue;
+			}
+
+			size_t sizeLeft = std::min(size, L2_SIZE - (virtualAddress & L2_OFFSET));
+
+			virtualAddress += sizeLeft;
+			size -= sizeLeft;
+			continue;
+		} else {
+			l3 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(entry & ~ATTR_MASK);
+		}
+
+		aarch64_level3_unmap(l3,
+				virtualAddress,
+				size);
+	}
+
+	return B_OK;
+}
+
+static status_t aarch64_level1_unmap(uint64 * level1,
+	unsigned long& virtualAddress,
+	size_t& size)
+{
+	auto allocator = static_cast<BlockPhysicalMemoryAllocator *>(gBootPhysicalMemoryAllocator);
+
+	for(int l1_index = pmap_l1_index(virtualAddress) ;
+			l1_index < Ln_ENTRIES && size > 0 ;
+			++l1_index)
+	{
+		uint64 entry = level1[l1_index];
+		uint64 * l2;
+
+		if((entry & ATTR_DESCR_MASK) == L1_BLOCK) {
+			// Existing block. Check if we need to promote the mapping
+
+			if(!(virtualAddress & L1_OFFSET) && (size >= L1_SIZE))
+			{
+				// Just update
+				level1[l1_index] = 0;
+				size -= L1_SIZE;
+				virtualAddress += L1_SIZE;
+				continue;
+			}
+
+			// We need to expand the table
+			int error = aarch64_promote_mapping<DMAPPhysicalTranslator>(&level1[l1_index],
+					allocator,
+					L2_SIZE,
+					L2_BLOCK);
+
+			if(error < 0) {
+				return error;
+			}
+
+			l2 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(level1[l1_index] & ~ATTR_MASK);
+		} else if((entry & ATTR_DESCR_MASK) != L1_TABLE) {
+			// If we can use the block mapping, use it
+			if(!(virtualAddress & L1_OFFSET) &&
+			   (size >= L1_SIZE))
+			{
+				// Just update
+				level1[l1_index] = 0;
+				size -= L1_SIZE;
+				virtualAddress += L1_SIZE;
+				continue;
+			}
+
+			size_t sizeLeft = std::min(size, L1_SIZE - (virtualAddress & L1_OFFSET));
+
+			virtualAddress += sizeLeft;
+			size -= sizeLeft;
+			continue;
+		} else {
+			l2 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(entry & ~ATTR_MASK);
+		}
+
+		status_t error = aarch64_level2_unmap(l2,
+				virtualAddress,
+				size);
+
+		if(error < 0) {
+			return error;
+		}
+	}
+
+	return B_OK;
+}
+
+static status_t aarch64_level0_unmap(uint64 * level0,
+			unsigned long virtualAddress,
+			size_t size)
+{
+	while(size > 0) {
+		int l0_index = pmap_l0_index(virtualAddress);
+		uint64 * l1;
+
+		if(!level0[l0_index]) {
+			size_t blockLeft = L0_SIZE - (virtualAddress & L0_OFFSET);
+			if(size <= blockLeft)
+				break;
+			size -= blockLeft;
+			virtualAddress += blockLeft;
+		} else {
+			l1 = (uint64 *)sPageTableTranslatorAArch64.MapPhysicalPage(level0[l0_index] & ~ATTR_MASK);
+		}
+
+		status_t error = aarch64_level1_unmap(l1, virtualAddress, size);
+
+		if(error != B_OK) {
+			return error;
+		}
+	}
+
+	return B_OK;
+}
+
+static void aarch64_level3_protect(uint64 * level3,
+	unsigned long& virtualAddress,
+	size_t& size,
+	uint64 protection)
+{
+	for(int l3_index = pmap_l3_index(virtualAddress) ;
+			l3_index < Ln_ENTRIES && size > 0 ;
+			++l3_index)
+	{
+		if(level3[l3_index]) {
+			level3[l3_index] = (level3[l3_index] & ~ATTR_MASK) | protection | L3_PAGE;
+		}
+		size -= B_PAGE_SIZE;
+		virtualAddress += B_PAGE_SIZE;
+	}
+}
+
+static status_t aarch64_level2_protect(uint64 * level2,
+	unsigned long& virtualAddress,
+	size_t& size,
+	uint64 protection)
+{
+	auto allocator = static_cast<BlockPhysicalMemoryAllocator *>(gBootPhysicalMemoryAllocator);
+
+	for(int l2_index = pmap_l2_index(virtualAddress) ;
+			l2_index < Ln_ENTRIES && size > 0 ;
+			++l2_index)
+	{
+		uint64 entry = level2[l2_index];
+		uint64 * l3;
+
+		if((entry & ATTR_DESCR_MASK) == L2_BLOCK) {
+			// Existing block. Check if we need to promote the mapping
+
+			if(!(virtualAddress & L2_OFFSET) && (size >= L2_SIZE))
+			{
+				// Just update
+				level2[l2_index] = (level2[l2_index] & ~ATTR_MASK) | protection | L2_BLOCK;
+				size -= L2_SIZE;
+				virtualAddress += L2_SIZE;
+				continue;
+			}
+
+			// We need to expand the table
+			int error = aarch64_promote_mapping<DMAPPhysicalTranslator>(&level2[l2_index],
+					allocator,
+					L3_SIZE,
+					L3_PAGE);
+
+			if(error < 0) {
+				return error;
+			}
+
+			l3 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(level2[l2_index] & ~ATTR_MASK);
+		} else if((entry & ATTR_DESCR_MASK) != L2_TABLE) {
+			// If we can use the block mapping, use it
+			if(!(virtualAddress & L2_OFFSET) &&
+			   (size >= L2_SIZE))
+			{
+				// Just update
+				size -= L2_SIZE;
+				virtualAddress += L2_SIZE;
+				continue;
+			}
+
+			size_t sizeLeft = std::min(size, L2_SIZE - (virtualAddress & L2_OFFSET));
+
+			virtualAddress += sizeLeft;
+			size -= sizeLeft;
+			continue;
+		} else {
+			l3 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(entry & ~ATTR_MASK);
+		}
+
+		aarch64_level3_protect(l3,
+				virtualAddress,
+				size,
+				protection);
+	}
+
+	return B_OK;
+}
+
+static status_t aarch64_level1_protect(uint64 * level1,
+	unsigned long& virtualAddress,
+	size_t& size,
+	uint64 protection)
+{
+	auto allocator = static_cast<BlockPhysicalMemoryAllocator *>(gBootPhysicalMemoryAllocator);
+
+	for(int l1_index = pmap_l1_index(virtualAddress) ;
+			l1_index < Ln_ENTRIES && size > 0 ;
+			++l1_index)
+	{
+		uint64 entry = level1[l1_index];
+		uint64 * l2;
+
+		if((entry & ATTR_DESCR_MASK) == L1_BLOCK) {
+			// Existing block. Check if we need to promote the mapping
+
+			if(!(virtualAddress & L1_OFFSET) && (size >= L1_SIZE))
+			{
+				// Just update
+				level1[l1_index] = (level1[l1_index] & ~ATTR_MASK) | protection | L1_BLOCK;
+				size -= L1_SIZE;
+				virtualAddress += L1_SIZE;
+				continue;
+			}
+
+			// We need to expand the table
+			int error = aarch64_promote_mapping<DMAPPhysicalTranslator>(&level1[l1_index],
+					allocator,
+					L2_SIZE,
+					L2_BLOCK);
+
+			if(error < 0) {
+				return error;
+			}
+
+			l2 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(level1[l1_index] & ~ATTR_MASK);
+		} else if((entry & ATTR_DESCR_MASK) != L1_TABLE) {
+			// If we can use the block mapping, use it
+			if(!(virtualAddress & L1_OFFSET) &&
+			   (size >= L1_SIZE))
+			{
+				// Just update
+				size -= L1_SIZE;
+				virtualAddress += L1_SIZE;
+				continue;
+			}
+
+			size_t sizeLeft = std::min(size, L1_SIZE - (virtualAddress & L1_OFFSET));
+
+			virtualAddress += sizeLeft;
+			size -= sizeLeft;
+			continue;
+		} else {
+			l2 = (uint64 *)DMAPPhysicalTranslator::ToVirtual(entry & ~ATTR_MASK);
+		}
+
+		status_t error = aarch64_level2_protect(l2,
+				virtualAddress,
+				size,
+				protection);
+
+		if(error < 0) {
+			return error;
+		}
+	}
+
+	return B_OK;
+}
+
+static status_t aarch64_level0_protect(uint64 * level0,
+			unsigned long virtualAddress,
+			size_t size,
+			uint64 protection)
+{
+	if(virtualAddress >= KERNEL_BASE) {
+		protection &= ~ATTR_nG;
+	} else {
+		protection |= ATTR_nG;
+	}
+
+	while(size > 0) {
+		int l0_index = pmap_l0_index(virtualAddress);
+		uint64 * l1;
+
+		if(!level0[l0_index]) {
+			size_t blockLeft = L0_SIZE - (virtualAddress & L0_OFFSET);
+			if(size <= blockLeft)
+				break;
+			size -= blockLeft;
+			virtualAddress += blockLeft;
+		} else {
+			l1 = (uint64 *)sPageTableTranslatorAArch64.MapPhysicalPage(level0[l0_index] & ~ATTR_MASK);
+		}
+
+		status_t error = aarch64_level1_protect(l1, virtualAddress, size, protection);
+
+		if(error != B_OK) {
+			return error;
+		}
+	}
+
+	return B_OK;
+}
 static inline uint64 build_page_protection(uint32 prot, uint32 memory_type)
 {
 	uint64 result = ATTR_AF | ATTR_SH(ATTR_SH_IS);
@@ -353,6 +732,117 @@ static inline uint64 build_page_protection(uint32 prot, uint32 memory_type)
 
 	return result;
 }
+
+
+class AArch64VirtualMemoryMapper final : public VirtualMemoryMapper {
+public:
+	static inline uint64 * _ChooseTTBR(uint64 virtualAddress) {
+		if(virtualAddress >= KERNEL_BASE)
+			return (uint64 *)sPageTableTranslatorAArch64.MapPhysicalPage(gAArch64PageDirectoryPhysicalTTBR1);
+		return (uint64 *)sPageTableTranslatorAArch64.MapPhysicalPage(gAArch64PageDirectoryPhysicalTTBR0);
+	}
+
+	virtual status_t MapVirtualMemoryRegion(uint64 virtualAddress,
+			uint64 physicalAddress, uint64 size, uint32 protection)
+					override final
+	{
+		auto allocator = static_cast<BlockPhysicalMemoryAllocator *>(gBootPhysicalMemoryAllocator);
+		return aarch64_level0_remap<DMAPPhysicalTranslator>(allocator,
+				_ChooseTTBR(virtualAddress),
+				virtualAddress,
+				physicalAddress,
+				size,
+				build_page_protection(protection, protection & B_MTR_MASK));
+	}
+
+	virtual status_t ProtectVirtualMemoryRegion(uint64 virtualAddress,
+			uint64 size, uint32 protection)
+	{
+		return aarch64_level0_protect(_ChooseTTBR(virtualAddress),
+				virtualAddress,
+				size,
+				protection);
+	}
+
+	virtual status_t UnmapVirtualMemoryRegion(uint64 virtualAddress,
+			uint64 size)
+	{
+		return aarch64_level0_unmap(_ChooseTTBR(virtualAddress),
+				virtualAddress,
+				size);
+	}
+
+	virtual uint64 QueryVirtualAddress(uint64 virtualAddress,
+			uint32& regionSize)
+	{
+		uint64 * level0 = _ChooseTTBR(virtualAddress);
+
+		int l0_index = pmap_l0_index(virtualAddress);
+
+		if((level0[l0_index] & ATTR_DESCR_MASK) != L0_TABLE) {
+			regionSize = 0;
+			return 0;
+		}
+
+		uint64 * level1 = (uint64 *)sPageTableTranslatorAArch64.MapPhysicalPage(level0[l0_index] & ~ATTR_DESCR_MASK);
+
+		int l1_index = pmap_l1_index(virtualAddress);
+
+		if((level1[l1_index] & ATTR_DESCR_MASK) == L1_BLOCK) {
+			regionSize = L1_SIZE;
+			return (virtualAddress & L1_OFFSET) | (level1[l1_index] & ~ATTR_MASK);
+		}
+
+		if((level1[l1_index] & ATTR_DESCR_MASK) != L1_TABLE) {
+			regionSize = 0;
+			return 0;
+		}
+
+		uint64 * level2 = (uint64 *)sPageTableTranslatorAArch64.MapPhysicalPage(level1[l1_index] & ~ATTR_DESCR_MASK);
+
+		int l2_index = pmap_l2_index(virtualAddress);
+
+		if((level2[l2_index] & ATTR_DESCR_MASK) == L2_BLOCK) {
+			regionSize = L2_SIZE;
+			return (virtualAddress & L2_OFFSET) | (level2[l2_index] & ~ATTR_MASK);
+		}
+
+		if((level2[l2_index] & ATTR_DESCR_MASK) != L2_TABLE) {
+			regionSize = 0;
+			return 0;
+		}
+
+		uint64 * level3 = (uint64 *)sPageTableTranslatorAArch64.MapPhysicalPage(level2[l2_index] & ~ATTR_DESCR_MASK);
+
+		int l3_index = pmap_l3_index(virtualAddress);
+
+		if((level3[l3_index] & ATTR_DESCR_MASK) != L3_PAGE) {
+			regionSize = 0;
+			return 0;
+		}
+
+		regionSize = L3_SIZE;
+		return (virtualAddress & L3_OFFSET) | (level3[l3_index] & ~ATTR_MASK);
+	}
+
+	virtual void * MapPhysicalLoaderMemory(uint64 physicalAddress, size_t, bool)
+	{
+		return (void *)(UMAP_BASE + physicalAddress);
+	}
+
+	virtual void UnmapPhysicalLoaderMemory(void *, size_t)
+	{
+	}
+
+	virtual void * MapPhysicalKernelMemory(uint64 physicalAddress, size_t)
+	{
+		return (void *)(UMAP_BASE + physicalAddress);
+	}
+
+	virtual void UnmapPhysicalKernelMemory(void *, size_t)
+	{
+	}
+};
 
 extern "C" void aarch64_initialize_mmu(const void * dtb_phys,
 		addr_t executable_start,
@@ -427,6 +917,16 @@ extern "C" void aarch64_initialize_mmu(const void * dtb_phys,
 			build_page_protection(B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, 0));
 	}
 
+	// Create mapping for UMAP (uncached device mapping)
+	for(uint32 i = 0 ; i < allocator->fRAMRegionCount ; ++i) {
+		aarch64_level0_remap<DirectPhysicalTranslator>(allocator,
+			(uint64 *)gAArch64PageDirectoryPhysicalTTBR1,
+			UMAP_BASE,
+			0,
+			UMAP_END - UMAP_BASE,
+			build_page_protection(B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, B_MTR_DEV));
+	}
+
 	// Create virtual mapping for boot loader .text
 	aarch64_level0_remap<DirectPhysicalTranslator>(allocator,
 		(uint64 *)gAArch64PageDirectoryPhysicalTTBR0,
@@ -474,4 +974,36 @@ extern "C" void aarch64_initialize_mmu(const void * dtb_phys,
 		data_start,
 		executable_end - data_start,
 		build_page_protection(B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, 0));
+
+	// Create virtual mapping for Device Tree Blob
+	aarch64_level0_remap<DirectPhysicalTranslator>(allocator,
+		(uint64 *)gAArch64PageDirectoryPhysicalTTBR0,
+		(addr_t)dtb_phys,
+		(addr_t)dtb_phys,
+		ROUNDUP(fdt_totalsize(dtb_phys), B_PAGE_SIZE),
+		build_page_protection(B_KERNEL_READ_AREA, 0));
+}
+
+static BlockVirtualRegionAllocator sAArch64LoaderAllocator;
+static AArch64VirtualMemoryMapper sAArch64VirtualMemoryMapper;
+
+void arch_init_mmu(stage2_args * args)
+{
+	gBootPageTableMapper = &sPageTableTranslatorAArch64;
+	gBootLoaderVirtualRegionAllocator = &sAArch64LoaderAllocator;
+
+	auto allocator = reinterpret_cast<BlockPhysicalMemoryAllocator *>(&gAArch64DTBAllocatorStore);
+
+	// Initial sort of regions (for RAM map)
+	allocator->Sort();
+
+	// This has been initialize by aarch64_initialize_mmu
+	gBootPhysicalMemoryAllocator = allocator;
+
+	// Don't bother with low memory ranges
+	sAArch64LoaderAllocator.Init(0x200000000, 0x400000000);
+
+	gBootVirtualMemoryMapper = &sAArch64VirtualMemoryMapper;
+
+	gBootKernelVirtualRegionAllocator.Init(KERNEL_BASE, KERNEL_BASE + KERNEL_SIZE);
 }

@@ -9,7 +9,7 @@ UsePrivateHeaders kernel [ FDirName kernel platform qemu-virt ] ;
 UsePrivateHeaders kernel [ FDirName kernel arch $(TARGET_KERNEL_ARCH) ] 
 	[ FDirName kernel boot platform $(HAIKU_BOOT_PLATFORM) ] ;
 
-SubDirC++Flags -fno-rtti ;
+SubDirC++Flags -fno-rtti  -g -O0 ;
 
 BootMergeObject boot_platform_qemu-virt_aarch64.o :
 	head.S

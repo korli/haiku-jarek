@@ -13,7 +13,7 @@ BootMergeObject boot_arch_$(TARGET_KERNEL_ARCH).o :
 	locore.S
 	arch_elf.cpp
 	mmu.cpp
-	: -std=c++11 # additional flags
+	: -fno-rtti -std=c++11 -g -O0 # additional flags
 ;
 
 SEARCH on [ FGristFiles memcpy.S memset.S ]
