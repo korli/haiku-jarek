@@ -136,7 +136,7 @@ public:
 
 	/*!
 	 * Create mapping of temporary physical region into loader's
-	 * virtual address space
+	 * virtual address space. This creates device memory mapping.
 	 */
 	virtual void * MapPhysicalLoaderMemory(uint64 physicalAddress, size_t size, bool allowTemporaryMapping = false);
 
@@ -147,7 +147,7 @@ public:
 
 	/*!
 	 * Create mapping of temporary physical region into loader's
-	 * virtual address space
+	 * virtual address space. This creates device memory mapping.
 	 */
 	virtual void * MapPhysicalKernelMemory(uint64 physicalAddress, size_t size);
 
@@ -212,6 +212,6 @@ extern PhysicalMemoryAllocator * gBootPhysicalMemoryAllocator;
 extern BlockVirtualRegionAllocator gBootKernelVirtualRegionAllocator;
 extern VirtualRegionAllocator * gBootLoaderVirtualRegionAllocator;
 extern VirtualMemoryMapper * gBootVirtualMemoryMapper;
-extern PageTablePhysicalMemoryMapper * gBootPageTableMapper;
+extern PhysicalMemoryMapper * gBootPageTableMapper;
 
 #endif /* KERNEL_BOOT_MEMORY_H_ */

@@ -16,7 +16,7 @@ PhysicalMemoryAllocator * gBootPhysicalMemoryAllocator;
 BlockVirtualRegionAllocator gBootKernelVirtualRegionAllocator;
 VirtualMemoryMapper * gBootVirtualMemoryMapper;
 VirtualRegionAllocator * gBootLoaderVirtualRegionAllocator;
-PageTablePhysicalMemoryMapper * gBootPageTableMapper;
+PhysicalMemoryMapper * gBootPageTableMapper;
 
 //#define TRACE_MEMORY
 #ifdef TRACE_MEMORY
@@ -425,7 +425,7 @@ void * VirtualMemoryMapper::MapPhysicalLoaderMemory(uint64 physicalAddress, size
 
 	TRACE("MapPhysicalLoaderMemory: Allocated virtual region at %p\n", virtualAddress);
 
-	error = MapVirtualMemoryRegion((addr_t)virtualAddress, physicalAddress, size, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+	error = MapVirtualMemoryRegion((addr_t)virtualAddress, physicalAddress, size, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA | B_MTR_DEV);
 
 	if(error != B_OK) {
 		panic("Cant map virtual region");
@@ -469,7 +469,7 @@ void * VirtualMemoryMapper::MapPhysicalKernelMemory(uint64 physicalAddress, size
 
 	TRACE("MapPhysicalKernelMemory: Allocated virtual region at %p\n", virtualAddress);
 
-	error = MapVirtualMemoryRegion((addr_t)virtualAddress, physicalAddress, size, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+	error = MapVirtualMemoryRegion((addr_t)virtualAddress, physicalAddress, size, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA | B_MTR_DEV);
 
 	if(error != B_OK) {
 		panic("Cant map virtual region");

@@ -192,7 +192,29 @@ struct LargeAllocation {
 			return error;
 		}
 
-		fAddress = gBootVirtualMemoryMapper->MapPhysicalLoaderMemory(fPhysicalAddress, size, true);
+		fAddress = nullptr;
+
+		error = gBootLoaderVirtualRegionAllocator->AllocateVirtualMemoryRegion(&fAddress,
+				fSize,
+				B_PAGE_SIZE,
+				false,
+				true);
+
+		if(error != B_OK) {
+			gBootPhysicalMemoryAllocator->FreePhysicalMemory(fPhysicalAddress, fSize);
+			return error;
+		}
+
+		error = gBootVirtualMemoryMapper->MapVirtualMemoryRegion((addr_t)fAddress,
+				fPhysicalAddress,
+				fSize,
+				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+
+		if(error != B_OK) {
+			gBootPhysicalMemoryAllocator->FreePhysicalMemory(fPhysicalAddress, fSize);
+			gBootLoaderVirtualRegionAllocator->ReleaseVirtualMemoryRegion(fAddress, fSize);
+			return error;
+		}
 
 		return B_OK;
 	}
