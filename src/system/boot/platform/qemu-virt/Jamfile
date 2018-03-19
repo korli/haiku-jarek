@@ -41,6 +41,7 @@ BootMergeObject boot_platform_qemu-virt_common.o :
 	menu.cpp
 	start.cpp
 	video.cpp
+	cpu.cpp
 	: -fno-rtti -g -O0
 	: boot_platform_generic.a
 ;

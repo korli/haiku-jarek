@@ -11,6 +11,8 @@
 
 #include <string.h>
 
+#include "cpu.h"
+
 static uint32 sBootOptions = 0;
 
 extern "C" void
@@ -68,6 +70,10 @@ extern "C" void _plat_start(const void * dtb_phys)
 	args.platform.fdt_phys = dtb_phys;
 
 	arch_init_mmu(&args);
+
+	cpu_init_via_device_tree(fdt::Node(dtb_phys));
+
+
 
 	for(;;);
 }
