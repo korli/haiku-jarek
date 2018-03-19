@@ -11,7 +11,7 @@ SECTIONS
 {
   /* Read-only sections, merged into text segment: */
   /* Link address doesn't mean much as it's virtual address */
-  PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x400000)); . = SEGMENT_START("text-segment", 0x400000);
+  PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x100000000)); . = SEGMENT_START("text-segment", 0x100000000);
   .text.head	  : { *(.text.head) }
   .interp         : { *(.interp) }
   .note.gnu.build-id : { *(.note.gnu.build-id) }
@@ -61,6 +61,7 @@ SECTIONS
   {
     KEEP (*(SORT_NONE(.fini)))
   } =0
+  . = ALIGN(CONSTANT (COMMONPAGESIZE));
   PROVIDE (__etext = .);
   PROVIDE (_etext = .);
   PROVIDE (etext = .);
@@ -77,6 +78,7 @@ SECTIONS
   /* Adjust the address for the data segment.  We want to adjust up to
      the same address within the page on the next page up.  */
   . = DATA_SEGMENT_ALIGN (CONSTANT (MAXPAGESIZE), CONSTANT (COMMONPAGESIZE));
+  __data_start__ = . ;
   /* Exception handling  */
   .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) *(.eh_frame.*) }
   .gnu_extab      : ONLY_IF_RW { *(.gnu_extab) }

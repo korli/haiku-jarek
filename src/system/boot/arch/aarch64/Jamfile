@@ -2,6 +2,9 @@ SubDir HAIKU_TOP src system boot arch aarch64 ;
 
 SetupFeatureObjectsDir $(TARGET_BOOT_PLATFORM) ;
 
+SubDirSysHdrs [ FDirName $(HAIKU_TOP) src system kernel bsp fdt ] ;
+SubDirSysHdrs [ FDirName $(HAIKU_TOP) src system kernel bsp fdt libfdt ] ;
+
 DEFINES += _BOOT_MODE ;
 
 BootMergeObject boot_arch_$(TARGET_KERNEL_ARCH).o :

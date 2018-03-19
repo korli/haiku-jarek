@@ -20,7 +20,11 @@ real_start:
 	adr		x1, boot_stack_end
 	mov		sp, x1
 
-	bl		aarch64_locore_init
+	// Return to virtual base address
+	ldr		x30, =1f
+	b		aarch64_locore_init
+1:
+
 
 	b	.
 

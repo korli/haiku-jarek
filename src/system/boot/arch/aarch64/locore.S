@@ -61,6 +61,43 @@ ENTRY(aarch64_locore_init)
 	msr	sctlr_el1, x2
 	isb
 
+	/*
+	 * Setup TCR according to PARange bits from ID_AA64MMFR0_EL1.
+	 */
+	ldr	x2, tcr
+	mrs	x3, id_aa64mmfr0_el1
+	bfi	x2, x3, #32, #3
+	msr	tcr_el1, x2
+
+	/* Initialize the MMU */
+	/* x0 - pointer to DTB */
+	/* x1 - executable start (physical load address) */
+	/* x2 - executable end (physical) */
+	/* x3 - start of data */
+	/* x4 - DTB allocator */
+	/* x5 - virtual address of loader */
+	/* x6 - physical address of .rodata */
+	adrp	x1, __executable_start
+	adrp	x2, _end
+	add		x2, x2, :lo12:_end
+	adrp	x3, __data_start__
+	adrp	x4, gAArch64DTBAllocatorStore
+	add		x4, x4, :lo12:gAArch64DTBAllocatorStore
+	ldr		x5, =__executable_start
+	adrp	x6, __etext
+	bl		aarch64_initialize_mmu
+
+	/* Load TTBR0 and TTBR1 */
+	adrp 	x0, gAArch64PageDirectoryPhysicalTTBR0
+	add		x0, x0, :lo12:gAArch64PageDirectoryPhysicalTTBR0
+	ldr		x0, [x0]
+	msr		ttbr0_el1, x0
+
+	adrp 	x0, gAArch64PageDirectoryPhysicalTTBR1
+	add		x0, x0, :lo12:gAArch64PageDirectoryPhysicalTTBR1
+	ldr		x0, [x0]
+	msr		ttbr1_el1, x0
+
 	/* Set the context id */
 	msr	contextidr_el1, xzr
 
@@ -73,14 +110,6 @@ ENTRY(aarch64_locore_init)
 	ldr	x2, mair
 	msr	mair_el1, x2
 
-	/*
-	 * Setup TCR according to PARange bits from ID_AA64MMFR0_EL1.
-	 */
-	ldr	x2, tcr
-	mrs	x3, id_aa64mmfr0_el1
-	bfi	x2, x3, #32, #3
-	msr	tcr_el1, x2
-
 	/* Setup SCTLR */
 	ldr	x2, sctlr_set
 	ldr	x3, sctlr_clear
@@ -88,19 +117,24 @@ ENTRY(aarch64_locore_init)
 	bic	x1, x1, x3	/* Clear the required bits */
 	orr	x1, x1, x2	/* Set the required bits */
 	msr	sctlr_el1, x1
+
 	isb
 
-	/* Initialize the MMU */
-	/* x0 - pointer to DTB */
-	bl		aarch64_initialize_mmu
-
-	b		.
-
-
 	ldp		x0, x30, [sp], #16
+
+	/* Wipe the .bss segment */
+	ldr		x10, =__bss_start__
+	ldr		x11, =__bss_end__
+1:
+	stp		xzr, xzr, [x10], #16
+	stp		xzr, xzr, [x10], #16
+	stp		xzr, xzr, [x10], #16
+	stp		xzr, xzr, [x10], #16
+	cmp		x10, x11
+	b.lo	1b
+
 	ret
 END(aarch64_locore_init)
-
 
 /*
  * If we are started in EL2, configure the required hypervisor
@@ -215,8 +249,8 @@ sctlr_set:
 	.quad (SCTLR_LSMAOE | SCTLR_nTLSMD | SCTLR_UCI | SCTLR_SPAN | \
 	    SCTLR_nTWE | SCTLR_nTWI | SCTLR_UCT | SCTLR_DZE | \
 	    SCTLR_I | SCTLR_SED | SCTLR_SA0 | SCTLR_SA | SCTLR_C | \
-	    SCTLR_M | SCTLR_CP15BEN)
+	    SCTLR_M | SCTLR_CP15BEN | SCTLR_WXN)
 sctlr_clear:
 	/* Bits to clear */
-	.quad (SCTLR_EE | SCTLR_EOE | SCTLR_IESB | SCTLR_WXN | SCTLR_UMA | \
+	.quad (SCTLR_EE | SCTLR_EOE | SCTLR_IESB | SCTLR_UMA | \
 	    SCTLR_ITD | SCTLR_THEE | SCTLR_A)
