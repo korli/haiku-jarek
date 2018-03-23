@@ -43,15 +43,7 @@ void cpu_init_via_device_tree(fdt::Node dtb)
 		if(strcmp((const char *)deviceType.Data(), "cpu") != 0)
 			continue;
 
-		fdt::Property status(child.GetProperty("status"));
-
-		if((status.IsNull() ||
-			!strcmp((const char *)status.Data(), "okay") ||
-			!strcmp((const char *)status.Data(), "ok")) &&
-			!child.GetProperty("enable-method").IsNull())
-		{
-			++gKernelArgs.num_cpus;
-		}
+		++gKernelArgs.num_cpus;
 	}
 
 	if(!gKernelArgs.num_cpus) {
