@@ -133,6 +133,12 @@ ENTRY(aarch64_locore_init)
 	cmp		x10, x11
 	b.lo	1b
 
+	/* Enable VFP */
+	mrs		x10, cpacr_el1
+	bic		x10, x10, #CPACR_FPEN_MASK
+	orr		x10, x10, #CPACR_FPEN_TRAP_NONE
+	msr		cpacr_el1, x10
+
 	ret
 END(aarch64_locore_init)
 

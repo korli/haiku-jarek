@@ -1,3 +1,4 @@
 SubDir HAIKU_TOP src system kernel bsp ;
 
 SubInclude HAIKU_TOP src system kernel bsp fdt ;
+SubInclude HAIKU_TOP src system kernel bsp io_space ;

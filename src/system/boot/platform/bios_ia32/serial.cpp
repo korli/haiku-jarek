@@ -12,6 +12,8 @@
 
 #include <string.h>
 
+#include "uart_bus_access.h"
+#include <type_traits>
 
 //#define ENABLE_SERIAL
 	// define this to always enable serial output
@@ -33,15 +35,16 @@ static const uint32 kSerialBaudRate = 115200;
 
 static int32 sSerialEnabled = 0;
 static uint16 sSerialBasePort = 0x3f8;
+static std::aligned_storage<sizeof(BoardSupportPackage::X86PortIOSpace),
+			alignof(BoardSupportPackage::X86PortIOSpace)>::type sUARTIO;
+static std::aligned_storage<BoardSupportPackage::kUARTBusAccessStorageSize,
+			alignof(BoardSupportPackage::UARTBusAccess)>::type sUART_;
+static BoardSupportPackage::UARTBusAccess * sUART;
 
 static void
 serial_putc(char c)
 {
-	// wait until the transmitter empty bit is set
-	while ((in8(sSerialBasePort + SERIAL_LINE_STATUS) & 0x20) == 0)
-		asm volatile ("pause;");
-
-	out8(c, sSerialBasePort + SERIAL_TRANSMIT_BUFFER);
+	sUART->PutC(c);
 }
 
 
@@ -97,16 +100,14 @@ serial_init(void)
 	if (gKernelArgs.platform_args.serial_base_ports[0] != 0)
 		sSerialBasePort = gKernelArgs.platform_args.serial_base_ports[0];
 
-	uint16 divisor = uint16(115200 / kSerialBaudRate);
 
-	out8(0x80, sSerialBasePort + SERIAL_LINE_CONTROL);
-		// set divisor latch access bit
-	out8(divisor & 0xf, sSerialBasePort + SERIAL_DIVISOR_LATCH_LOW);
-	out8(divisor >> 8, sSerialBasePort + SERIAL_DIVISOR_LATCH_HIGH);
-	out8(3, sSerialBasePort + SERIAL_LINE_CONTROL);
-		// 8N1
+	BoardSupportPackage::X86PortIOSpace * port = new(&sUARTIO) BoardSupportPackage::X86PortIOSpace(sSerialBasePort);
+	sUART = BoardSupportPackage::UART_NS8250CreateBusAccess(&sUART_, sizeof(sUART_), port);
 
+	if(sUART->Probe()) {
+		sUART->Init(115200, 8, 1, BoardSupportPackage::UARTParity::None);
 #ifdef ENABLE_SERIAL
-	serial_enable();
+		serial_enable();
 #endif
+	}
 }

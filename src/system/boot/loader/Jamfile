@@ -7,6 +7,7 @@ SubDirHdrs $(HAIKU_TOP) src add-ons kernel partitioning_systems apple ;
 SubDirHdrs $(HAIKU_TOP) src add-ons kernel partitioning_systems gpt ;
 SubDirHdrs $(HAIKU_TOP) src add-ons kernel partitioning_systems intel ;
 SubDirHdrs $(HAIKU_TOP) src system kernel bsp io_space ;
+SubDirHdrs $(HAIKU_TOP) src system kernel bsp uart ;
 
 UsePrivateKernelHeaders ;
 UsePrivateHeaders [ FDirName kernel disk_device_manager ] ;
@@ -112,6 +113,16 @@ BootStaticLibrary boot_loader :
 	io_space_base.cpp
 	;
 
+local bspUARTSources =
+	uart.cpp
+	uart_pl011.cpp
+	uart_ns8250.cpp
+	;
+
+BootStaticLibrary boot_bsp_uart :
+	$(bspUARTSources)
+	;
+	
 # The partition support is built in an extra static library
 # so that only the ones that are used will be included.
 
@@ -163,6 +174,9 @@ SEARCH on [ FGristFiles DataIO.cpp Referenceable.cpp ]
 
 SEARCH on [ FGristFiles io_space_base.cpp ]
     = [ FDirName $(HAIKU_TOP) src system kernel bsp io_space ] ;
+
+SEARCH on [ FGristFiles $(bspUARTSources) ]
+    = [ FDirName $(HAIKU_TOP) src system kernel bsp uart ] ;
 
 
 SubInclude HAIKU_TOP src system boot loader file_systems ;

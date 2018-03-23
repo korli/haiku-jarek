@@ -60,6 +60,7 @@ BootLd boot_loader_$(TARGET_BOOT_PLATFORM) :
 	boot_loader.a
 	boot_net.a
 	boot_partitions.a
+	boot_bsp_uart.a
 
 	# file systems
 	boot_bfs.a

@@ -12,8 +12,10 @@
 #include <string.h>
 
 #include "cpu.h"
+#include "serial.h"
+#include "console.h"
 
-static uint32 sBootOptions = 0;
+static uint32 sBootOptions = BOOT_OPTION_MENU | BOOT_OPTION_DEBUG_OUTPUT;
 
 extern "C" void
 platform_start_kernel(void)
@@ -73,7 +75,15 @@ extern "C" void _plat_start(const void * dtb_phys)
 
 	cpu_init_via_device_tree(fdt::Node(dtb_phys));
 
+	serial_init(fdt::Node(dtb_phys));
+	console_init();
 
+	main(&args);
 
 	for(;;);
+}
+
+extern "C" void spin(bigtime_t timeout)
+{
+
 }

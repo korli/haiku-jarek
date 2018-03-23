@@ -7,6 +7,7 @@
  */
 
 
+#include "serial.h"
 #include "console.h"
 
 #include <SupportDefs.h>
@@ -14,7 +15,6 @@
 #include <boot/stage2.h>
 
 #include <string.h>
-
 
 class Console : public ConsoleNode {
 public:
@@ -112,26 +112,52 @@ VTConsole::SetCursor(int32 x, int32 y)
 }
 
 
+static const char sVT100CMap[] = {
+		0,
+		4,
+		2,
+		6,
+		1,
+		5,
+		3,
+		4,
+		3,
+		4,
+		2,
+		6,
+		1,
+		5,
+		3,
+		7
+};
+
 void
 VTConsole::SetColor(int32 foreground, int32 background)
 {
-	static const char cmap[] = {
-		0, 4, 2, 6, 1, 5, 3, 7 };
-	char buffer[12];
+	char buffer[16];
 
-	if (foreground < 0 || foreground >= 8)
+	if (foreground < 0 || foreground >= (int)sizeof(sVT100CMap))
 		return;
-	if (background < 0 || background >= 8)
+	if (background < 0 || background >= (int)sizeof(sVT100CMap))
 		return;
+
+	int attr;
+
+	if(foreground == DARK_GRAY) {
+		attr = 2;
+	} else if(foreground >= BRIGHT_BLUE && foreground <= BRIGHT_RED) {
+		attr = 1;
+	} else {
+		attr = 0;
+	}
 
 	// We assume normal display attributes here
 	int len = snprintf(buffer, sizeof(buffer),
-		"\033[%" B_PRId32 ";%" B_PRId32 "m",
-		cmap[foreground] + 30, cmap[background] + 40);
+		"\033[%" B_PRId32 ";%" B_PRId32  ";%" B_PRId32 "m",
+		attr, sVT100CMap[foreground] + 30, sVT100CMap[background] + 40);
 
 	WriteAt(NULL, 0LL, buffer, len);
 }
-
 
 //     #pragma mark -
 
@@ -155,6 +181,7 @@ ssize_t
 SerialConsole::WriteAt(void *cookie, off_t /*pos*/, const void *buffer,
 	size_t bufferSize)
 {
+	serial_puts((const char *)buffer, bufferSize);
 	return bufferSize;
 }
 
@@ -205,7 +232,38 @@ console_hide_cursor(void)
 int
 console_wait_for_key(void)
 {
-	return -1;
+	int key = serial_getc(true);
+	if(key == 27) {
+		key = serial_getc(true);
+		if(key == '[') {
+			key = serial_getc(true);
+			switch(key)
+			{
+			case 'A': return TEXT_CONSOLE_KEY_UP;
+			case 'B': return TEXT_CONSOLE_KEY_DOWN;
+			case 'D': return TEXT_CONSOLE_KEY_LEFT;
+			case 'C': return TEXT_CONSOLE_KEY_RIGHT;
+			case 'H': return TEXT_CONSOLE_KEY_HOME;
+			case 'F': return TEXT_CONSOLE_KEY_END;
+			default: break;
+			}
+
+			if(key >= '0' && key <= '9') {
+				int other = serial_getc(true);
+				if(key == '5' && other == '~') {
+					return TEXT_CONSOLE_KEY_PAGE_UP;
+				}
+				if(key == '6' && other == '~') {
+					return TEXT_CONSOLE_KEY_PAGE_DOWN;
+				}
+				return other;
+			}
+			return key;
+		}
+		return key;
+	}
+
+	return key;
 }
 
 
