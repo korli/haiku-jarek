@@ -6,6 +6,8 @@ SubDirHdrs $(HAIKU_TOP) src add-ons kernel partitioning_systems amiga ;
 SubDirHdrs $(HAIKU_TOP) src add-ons kernel partitioning_systems apple ;
 SubDirHdrs $(HAIKU_TOP) src add-ons kernel partitioning_systems gpt ;
 SubDirHdrs $(HAIKU_TOP) src add-ons kernel partitioning_systems intel ;
+SubDirHdrs $(HAIKU_TOP) src system kernel bsp io_space ;
+
 UsePrivateKernelHeaders ;
 UsePrivateHeaders [ FDirName kernel disk_device_manager ] ;
 UsePrivateHeaders [ FDirName kernel util ] ;
@@ -71,7 +73,7 @@ UsePrivateHeaders shared storage ;
 	local kernelC++Header = [ FDirName $(HAIKU_TOP) headers private kernel util
 		kernel_cpp.h ] ;
 
-	SubDirC++Flags -fno-rtti -include $(kernelC++Header) -g -O0 ;
+	SubDirC++Flags -fno-rtti -include $(kernelC++Header) -g -O0 -std=c++11 ;
 }
 
 
@@ -106,6 +108,8 @@ BootStaticLibrary boot_loader :
 
 	DataIO.cpp
 	Referenceable.cpp
+	
+	io_space_base.cpp
 	;
 
 # The partition support is built in an extra static library
@@ -156,6 +160,9 @@ SEARCH on [ FGristFiles stage2_crt0.S ]
 
 SEARCH on [ FGristFiles DataIO.cpp Referenceable.cpp ]
     = [ FDirName $(HAIKU_TOP) src kits support ] ;
+
+SEARCH on [ FGristFiles io_space_base.cpp ]
+    = [ FDirName $(HAIKU_TOP) src system kernel bsp io_space ] ;
 
 
 SubInclude HAIKU_TOP src system boot loader file_systems ;
