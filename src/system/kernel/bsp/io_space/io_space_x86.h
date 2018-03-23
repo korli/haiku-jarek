@@ -165,6 +165,18 @@ public:
 				: "0"(buffer), "1"(count), "2"(base)
 				: "%eax", "memory", "cc");
 	}
+
+	virtual void io_barrier(IOBarrier barrier) override {
+		if(barrier == IOBarrier::WRITE) {
+			__asm__ __volatile__("":::"memory");
+		} else {
+#ifdef __HAIKU_ARCH_X86_64
+			__asm__ __volatile__("lock; addl $0, 0(%%rsp)" ::: "memory");
+#else
+			__asm__ __volatile__("lock; addl $0, 0(%%esp)" ::: "memory");
+#endif
+		}
+	}
 };
 
 class X86PortIOSpace final : public IOSpace
@@ -382,6 +394,18 @@ public:
 private:
 	virtual void write_region_8(unsigned int offset, const uint64 * buffer, size_t count) const noexcept { abort(); }
 #endif
+
+	virtual void io_barrier(IOBarrier barrier) override {
+		if(barrier == IOBarrier::WRITE) {
+			__asm__ __volatile__("":::"memory");
+		} else {
+#ifdef __HAIKU_ARCH_X86_64
+			__asm__ __volatile__("lock; addl $0, 0(%%rsp)" ::: "memory");
+#else
+			__asm__ __volatile__("lock; addl $0, 0(%%esp)" ::: "memory");
+#endif
+		}
+	}
 };
 
 }  // namespace BoardSupportPackage

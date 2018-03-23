@@ -10,6 +10,12 @@
 
 namespace BoardSupportPackage {
 
+enum class IOBarrier {
+	READ,
+	WRITE,
+	READ_WRITE
+};
+
 class IOSpace
 {
 public:
@@ -63,6 +69,8 @@ public:
 #ifdef __HAIKU_ARCH_64_BIT
 	virtual void write_region_8(unsigned int offset, const uint64 * buffer, size_t count) const noexcept = 0;
 #endif
+
+	virtual void io_barrier(IOBarrier barrier) { }
 };
 
 }  // namespace BoardSupportPackage

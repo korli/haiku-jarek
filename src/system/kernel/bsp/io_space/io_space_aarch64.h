@@ -351,6 +351,9 @@ public:
 			: "1"(fBaseAddress + offset), "2"(buffer), "3"(count)
 			: "memory", "cc");
 	}
+
+	virtual void io_barrier(IOBarrier barrier) override {
+	}
 };
 
 }  // namespace BoardSupportPackage

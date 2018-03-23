@@ -10,10 +10,19 @@
 
 #if defined(__HAIKU_ARCH_X86_64) || defined(__HAIKU_ARCH_X86)
 #include "io_space_x86.h"
+namespace BoardSupportPackage {
+typedef IOSpace DeviceIOSpace;
+}
 #elif defined(__HAIKU_ARCH_AARCH64)
 #include "io_space_aarch64.h"
+namespace BoardSupportPackage {
+typedef MemoryIOSpace DeviceIOSpace;
+}
 #elif defined(__HAIKU_ARCH_ARM)
 #include "io_space_arm.h"
+namespace BoardSupportPackage {
+typedef MemoryIOSpace DeviceIOSpace;
+}
 #else
 namespace BoardSupportPackage {
 typedef IOSpaceGeneric MemoryIOSpace;

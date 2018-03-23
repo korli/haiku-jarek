@@ -283,6 +283,10 @@ public:
 			: "1"(fBaseAddress + offset), "2"(buffer), "3"(count)
 			: "memory", "cc");
 	}
+
+	virtual void io_barrier(IOBarrier barrier) override {
+		__asm__ __volatile__("dsb" ::: "memory");
+	}
 };
 
 }  // namespace BoardSupportPackage
