@@ -134,6 +134,9 @@ public:
 		return fProperties;
 	}
 
+	bool IsDTBValid() const noexcept;
+	size_t DeviceTreeSize() const noexcept;
+
 	Node Parent() const noexcept;
 	Node FirstChild() const noexcept;
 	Node NextSibling() const noexcept;

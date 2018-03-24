@@ -3,13 +3,15 @@
  * Distributed under the terms of the MIT License.
  */
 
-#include <KernelExport.h>
-#include <boot/platform.h>
-#include <boot/heap.h>
-#include <boot/stage2.h>
-#include <arch/cpu.h>
+#include <drivers/KernelExport.h>
+#include <kernel/boot/platform.h>
+#include <kernel/boot/heap.h>
+#include <kernel/boot/stage2.h>
+#include <kernel/arch/cpu.h>
+#include <kernel/boot/memory.h>
 
 #include <string.h>
+#include <assert.h>
 
 #include "cpu.h"
 #include "serial.h"
@@ -69,13 +71,46 @@ extern "C" void _plat_start(const void * dtb_phys)
 
 	args.heap_size = HEAP_SIZE;
 	args.arguments = NULL;
-	args.platform.fdt_phys = dtb_phys;
 
 	arch_init_mmu(&args);
 
-	cpu_init_via_device_tree(fdt::Node(dtb_phys));
+	{
+		void * dtb_header = gBootVirtualMemoryMapper->MapPhysicalLoaderMemory((addr_t)dtb_phys,
+			4096,
+			true);
 
-	serial_init(fdt::Node(dtb_phys));
+		assert(dtb_header);
+
+		fdt::Node dtb_header_phys(dtb_header);
+		assert(dtb_header_phys.IsDTBValid());
+		size_t dtb_size = dtb_header_phys.DeviceTreeSize();
+		args.platform.fdt_phys = (addr_t)dtb_phys;
+
+		addr_t remap_base = args.platform.fdt_phys & ~(B_PAGE_SIZE - 1);
+		addr_t remap_end = (args.platform.fdt_phys + dtb_size + B_PAGE_SIZE - 1) & ~(B_PAGE_SIZE - 1);
+
+		gBootVirtualMemoryMapper->UnmapPhysicalLoaderMemory(dtb_header, 4096);
+
+		void * fdt_ldr_base;
+
+		gBootLoaderVirtualRegionAllocator->AllocateVirtualMemoryRegion(&fdt_ldr_base,
+				remap_end - remap_base,
+				B_PAGE_SIZE,
+				false,
+				false);
+
+		gBootVirtualMemoryMapper->MapVirtualMemoryRegion((addr_t)fdt_ldr_base,
+				remap_base,
+				remap_end - remap_base,
+				B_KERNEL_READ_AREA);
+
+		args.platform.fdt_virt = (void *)((addr_t)fdt_ldr_base + (args.platform.fdt_phys & (B_PAGE_SIZE - 1)));
+
+	}
+
+	cpu_init_via_device_tree(fdt::Node(args.platform.fdt_virt));
+
+	serial_init(fdt::Node(args.platform.fdt_virt));
 	console_init();
 
 	main(&args);

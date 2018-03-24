@@ -90,6 +90,14 @@ PropertyList::const_iterator PropertyList::cbegin() const noexcept
 	return offset < 0 ? const_iterator() : const_iterator(Property(fFDT, offset));
 }
 
+bool Node::IsDTBValid() const noexcept {
+	return fFDT && fdt_check_header(fFDT) == 0;
+}
+
+size_t Node::DeviceTreeSize() const noexcept {
+	return fdt_totalsize(fFDT);
+}
+
 Node Node::Parent() const noexcept
 {
 	if(!fFDT)

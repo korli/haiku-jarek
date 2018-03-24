@@ -21,10 +21,6 @@
 #include <kernel/boot/stage2.h>
 
 extern "C" {
-#include "libfdt.h"
-}
-
-extern "C" {
 
 // We need this allocator before startup. It can't be in .bss section as iw
 std::aligned_storage<sizeof(BlockPhysicalMemoryAllocator), alignof(BlockPhysicalMemoryAllocator)>::type __attribute__((section(".data"))) gAArch64DTBAllocatorStore;
@@ -855,10 +851,9 @@ extern "C" void aarch64_initialize_mmu(const void * dtb_phys,
 	executable_end = ROUNDUP(executable_end, B_PAGE_SIZE);
 
 	// Validate correctness
-	int error = fdt_check_header(dtb_phys);
-	assert(error == 0);
-
 	fdt::Node device_tree(dtb_phys);
+
+	assert(device_tree.IsDTBValid());
 
 	BlockPhysicalMemoryAllocator * allocator = new(theAllocator) BlockPhysicalMemoryAllocator();
 
@@ -892,8 +887,30 @@ extern "C" void aarch64_initialize_mmu(const void * dtb_phys,
 	// Exlude bootloader range
 	allocator->ReservePlatformRegion(executable_start, ROUNDUP(executable_end - executable_start, B_PAGE_SIZE));
 
+	// Exclude device tree
+	{
+		addr_t dtb_base = (addr_t)dtb_phys & ~(B_PAGE_SIZE - 1);
+		size_t dtb_size = (((addr_t)dtb_phys + device_tree.DeviceTreeSize() + B_PAGE_SIZE - 1) & ~(B_PAGE_SIZE - 1)) - dtb_base;
+		allocator->ReservePlatformRegion(dtb_base, dtb_size);
+	}
+
+	// Exclude initrd
+	{
+		fdt::Node chosen(device_tree.GetPath("/chosen"));
+		if(!chosen.IsNull()) {
+			fdt::Property initrd_start(chosen.GetProperty("linux,initrd-start"));
+			fdt::Property initrd_end(chosen.GetProperty("linux,initrd-end"));
+
+			if(!initrd_start.IsNull() && !initrd_end.IsNull()) {
+				addr_t tgz_base = initrd_start.EncodedGet(0) & ~(B_PAGE_SIZE - 1);
+				addr_t tgz_end = ((initrd_end.EncodedGet(0) + B_PAGE_SIZE - 1) & ~(B_PAGE_SIZE -1));
+				allocator->ReservePlatformRegion(tgz_base, tgz_end - tgz_base);
+			}
+		}
+	}
+
 	// Allocate new page directory
-	error = allocator->BlockPhysicalMemoryAllocator::AllocatePhysicalMemory(B_PAGE_SIZE,
+	int error = allocator->BlockPhysicalMemoryAllocator::AllocatePhysicalMemory(B_PAGE_SIZE,
 			B_PAGE_SIZE,
 			gAArch64PageDirectoryPhysicalTTBR0);
 	assert(error == 0);
@@ -974,14 +991,6 @@ extern "C" void aarch64_initialize_mmu(const void * dtb_phys,
 		data_start,
 		executable_end - data_start,
 		build_page_protection(B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, 0));
-
-	// Create virtual mapping for Device Tree Blob
-	aarch64_level0_remap<DirectPhysicalTranslator>(allocator,
-		(uint64 *)gAArch64PageDirectoryPhysicalTTBR0,
-		(addr_t)dtb_phys,
-		(addr_t)dtb_phys,
-		ROUNDUP(fdt_totalsize(dtb_phys), B_PAGE_SIZE),
-		build_page_protection(B_KERNEL_READ_AREA, 0));
 }
 
 static BlockVirtualRegionAllocator sAArch64LoaderAllocator;
