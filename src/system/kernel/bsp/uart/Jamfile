@@ -2,10 +2,12 @@ SubDir HAIKU_TOP src system kernel bsp uart ;
 
 UsePrivateHeaders shared ;
 
+SubDirHdrs $(HAIKU_TOP) src system kernel bsp io_space ;
+
 KernelMergeObject kernel_bsp_uart.o :
 	uart.cpp
 	uart_pl011.cpp
 	uart_ns8250.cpp
 
-	: $(TARGET_KERNEL_PIC_CCFLAGS)
+	: $(TARGET_KERNEL_PIC_CCFLAGS) -std=c++11
 ;
