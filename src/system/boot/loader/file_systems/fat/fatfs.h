@@ -8,6 +8,7 @@
 
 #include <SupportDefs.h>
 #include <ByteOrder.h>
+#include <endian.h>
 
 namespace FATFS {
 
@@ -22,16 +23,16 @@ class Volume;
 #define FAT_ARCHIVE             32
 
 #define read32(buffer,off) \
-        B_LENDIAN_TO_HOST_INT32(*(uint32 *)&buffer[off])
+		le32dec(reinterpret_cast<const char *>(buffer) + (off))
 
 #define read16(buffer,off) \
-        B_LENDIAN_TO_HOST_INT16(*(uint16 *)&buffer[off])
+		le16dec(reinterpret_cast<const char *>(buffer) + (off))
 
 #define write32(buffer, off, value) \
-        *(uint32*)&buffer[off] = B_HOST_TO_LENDIAN_INT32(value)
+		le32enc(reinterpret_cast<char *>(buffer) + (off), value)
 
 #define write16(buffer, off, value) \
-        *(uint16*)&buffer[off] = B_HOST_TO_LENDIAN_INT16(value)
+		le16enc(reinterpret_cast<char *>(buffer) + (off), value)
 
 enum name_lengths {
 	FATFS_BASENAME_LENGTH	= 8,
