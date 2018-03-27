@@ -34,6 +34,7 @@
 #include "uart.h"
 #include <kernel/cpu.h>
 #include <assert.h>
+#include <new>
 
 /* PL011 UART registers and masks*/
 #define	UART_DR		0x00		/* Data register */

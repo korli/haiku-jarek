@@ -36,6 +36,7 @@
 #include <assert.h>
 #include <kernel/cpu.h>
 #include <drivers/KernelExport.h>
+#include <new>
 
 namespace BoardSupportPackage {
 
