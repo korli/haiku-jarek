@@ -1,0 +1,31 @@
+SubDir HAIKU_TOP src system kernel lib arch aarch64 ;
+
+SEARCH_SOURCE += [ FDirName $(SUBDIR) $(DOTDOT) generic ] ;
+
+local librootSources = [ FDirName $(HAIKU_TOP) src system libroot ] ;
+local posixSources = [ FDirName $(librootSources) posix ] ;
+
+SEARCH_SOURCE += [ FDirName $(librootSources) os arch $(TARGET_ARCH) ] ;
+SEARCH_SOURCE += [ FDirName $(librootSources) os arch generic ] ;
+
+KernelMergeObject kernel_os_arch_$(TARGET_ARCH).o :
+	generic_atomic.cpp
+	generic_system_time_nsecs.cpp
+
+	: $(TARGET_KERNEL_PIC_CCFLAGS)
+;
+
+SEARCH_SOURCE += [ FDirName $(posixSources) arch $(TARGET_ARCH) ] ;
+SEARCH_SOURCE += [ FDirName $(posixSources) string arch generic ] ;
+SEARCH_SOURCE += [ FDirName $(posixSources) string arch $(TARGET_ARCH) ] ;
+
+KernelMergeObject kernel_lib_posix_arch_$(TARGET_ARCH).o :
+	kernel_longjmp_return.c
+	kernel_setjmp_save_sigs.c
+
+	memcpy.S
+	memmove.S
+	memset.S	
+
+	: $(TARGET_KERNEL_PIC_CCFLAGS)
+;

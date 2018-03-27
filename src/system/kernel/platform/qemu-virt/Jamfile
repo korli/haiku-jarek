@@ -1,0 +1,14 @@
+SubDir HAIKU_TOP src system kernel platform qemu-virt ;
+
+SubDirHdrs $(HAIKU_TOP) headers private kernel platform $(TARGET_BOOT_PLATFORM) ;
+
+SubDirCcFlags $(TARGET_KERNEL_PIC_CCFLAGS) ;
+SubDirC++Flags $(TARGET_KERNEL_PIC_CCFLAGS) ;
+
+KernelMergeObject kernel_platform_$(TARGET_BOOT_PLATFORM).o :
+	:
+	:
+	kernel_bsp_uart.o
+	kernel_bsp_fdt.o
+	kernel_bsp_io_space.o
+;

@@ -1,0 +1,9 @@
+SubDir HAIKU_TOP src system kernel bsp io_space ;
+
+UsePrivateHeaders shared ;
+
+KernelMergeObject kernel_bsp_io_space.o :
+	io_space_base.cpp
+
+	: $(TARGET_KERNEL_PIC_CCFLAGS)
+;
