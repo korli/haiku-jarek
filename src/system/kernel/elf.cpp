@@ -3422,3 +3422,8 @@ _user_read_kernel_image_symbols(image_id id, Elf_Sym* symbolTable,
 	return elf_read_kernel_image_symbols(id, symbolTable, _symbolCount,
 		stringTable, _stringTableSize, _imageDelta, false);
 }
+
+int dl_iterate_phdr(__dl_iterate_hdr_callback callback, void * arg)
+{
+	return -1;
+}

@@ -541,6 +541,14 @@ struct Thread : TeamThreadIteratorEntry<thread_id>, KernelReferenceable {
 	// architecture dependent section
 	struct arch_thread arch_info;
 
+	struct {
+		    void *   			caughtExceptions;
+		    unsigned int        uncaughtExceptions;
+#ifdef __arm__
+		    void * 				propagatingExceptions;
+#endif
+	} eh_globals;
+
 public:
 								Thread() {}
 									// dummy for the idle threads

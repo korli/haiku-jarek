@@ -163,6 +163,7 @@ if $(HAIKU_ARCH) in x86_64 arm {
 		kernel_lib_posix.o
 		kernel_lib_posix_arch_$(TARGET_ARCH).o
 		kernel_misc.o
+		kernel_compiler_rt_$(TARGET_ARCH).o
 
 		: $(HAIKU_TOP)/src/system/ldscripts/$(TARGET_ARCH)/kernel.ld
 		: -Bdynamic -shared -export-dynamic -dynamic-linker /foo/bar

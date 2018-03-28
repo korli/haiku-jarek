@@ -131,10 +131,3 @@ puts(const char *string)
 {
 	return fputs(string, stdout);
 }
-
-void __assert_fail (const char *__assertion, const char *__file,
-			   unsigned int __line, const char *__function)
-{
-	panic("Assertion failure: %s at %s:%d in %s", __assertion, __file, __line, __function);
-	for(;;);
-}

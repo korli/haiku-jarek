@@ -50,16 +50,6 @@ rule BootLd
 	LINKFLAGS on $(1) = $(TARGET_BOOT_LINKFLAGS) $(4) ;
 	if $(3) { LINKFLAGS on $(1) += --script=$(3) ; }
 
-	# Remove any preset LINKLIBS, but link against libgcc.a. Linking against
-	# libsupc++ is opt-out.
-	local libs ;
-	if ! [ on $(1) return $(HAIKU_NO_LIBSUPC++) ] {
-		libs += [ TargetBootLibsupc++ true ] ;
-		Depends $(1) : [ TargetBootLibsupc++ ] ;
-	}
-	LINKLIBS on $(1) =  $(libs) [ TargetBootLibgcc true ] ;
-	Depends $(1) : [ TargetBootLibgcc ] ;
-
 	# TODO: Do we really want to invoke SetupBoot here? The objects should
 	# have been compiled with BootObjects anyway, so we're doing that twice.
 	SetupBoot $(2) ;

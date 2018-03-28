@@ -52,6 +52,8 @@
 
 #include "TeamThreadTables.h"
 
+#include <__external_threading>
+
 
 //#define TRACE_THREAD
 #ifdef TRACE_THREAD
@@ -3734,3 +3736,23 @@ _user_setrlimit(int resource, const struct rlimit *userResourceLimit)
 
 	return common_setrlimit(resource, &resourceLimit);
 }
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+__libcpp_thread_id __libcpp_thread_get_current_id() {
+	return thread_get_current_thread()->id;
+}
+
+__libcpp_thread_id __libcpp_thread_get_id(const __libcpp_thread_t *__t) {
+	return __t->id;
+}
+
+void __libcpp_thread_yield() {
+	thread_yield();
+}
+
+void __libcpp_thread_sleep_for(const chrono::nanoseconds& __ns) {
+	snooze(__ns.count() / 1000ULL);
+}
+
+_LIBCPP_END_NAMESPACE_STD

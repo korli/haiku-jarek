@@ -15,6 +15,7 @@ KernelMergeObject kernel_bsp_fdt.o :
 	fdt_rw.c
 	fdt_sw.c
 	fdt.c
+	fdt_wip.c
 	fdt_support.cpp
 
 	: $(TARGET_KERNEL_PIC_CCFLAGS)

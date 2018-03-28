@@ -18,6 +18,7 @@
 #include <thread.h>
 #include <util/AutoLock.h>
 
+#include <__external_threading>
 
 #define STATUS_ADDED	1
 #define STATUS_WAITING	2
@@ -380,3 +381,41 @@ condition_variable_init()
 		"\n"
 		"Lists all existing condition variables\n", 0);
 }
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+int __libcpp_condvar_signal(__libcpp_condvar_t* __cv) {
+	__cv->NotifyOne();
+	return 0;
+}
+
+int __libcpp_condvar_broadcast(__libcpp_condvar_t* __cv) {
+	__cv->NotifyAll();
+	return 0;
+}
+
+int __libcpp_condvar_wait(__libcpp_condvar_t* __cv, __libcpp_mutex_t* __m) {
+	ConditionVariableEntry entry;
+	__cv->Add(&entry);
+	__libcpp_mutex_unlock(__m);
+	int error = entry.Wait();
+	__libcpp_mutex_lock(__m);
+	return error;
+}
+
+int __libcpp_condvar_timedwait(__libcpp_condvar_t *__cv, __libcpp_mutex_t *__m,
+                               timespec *__ts)
+{
+	ConditionVariableEntry entry;
+	__cv->Add(&entry);
+	__libcpp_mutex_unlock(__m);
+	int error = entry.Wait(B_RELATIVE_TIMEOUT, __ts->tv_sec * 1000000ULL + (__ts->tv_nsec + 999) / 1000ULL);
+	__libcpp_mutex_lock(__m);
+	return error;
+}
+
+int __libcpp_condvar_destroy(__libcpp_condvar_t* __cv) {
+	return 0;
+}
+
+_LIBCPP_END_NAMESPACE_STD

@@ -426,3 +426,8 @@ free(void* allocated)
 	sFreeChunkTree.Insert(freedChunk);
 	sAvailable += freedChunk->Size();
 }
+
+extern "C" void* memalign(size_t, size_t bytes)
+{
+	return malloc(bytes);
+}

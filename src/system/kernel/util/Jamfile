@@ -2,13 +2,73 @@ SubDir HAIKU_TOP src system kernel util ;
 
 UsePrivateHeaders [ FDirName kernel util ] ;
 
+SubDirSysHdrs $(HAIKU_TOP) src libs unwind include ;
+SubDirSysHdrs $(HAIKU_TOP) src libs libc++abi include ;
+
+local kernelUnwindSources =
+	libunwind.cpp
+    Unwind-EHABI.cpp
+    UnwindLevel1.c
+    UnwindLevel1-gcc-ext.c
+    Unwind-sjlj.c
+    UnwindRegistersRestore.S
+    UnwindRegistersSave.S
+	;
+
+local kernelCxxAbiSources =
+  	cxa_aux_runtime.cpp
+  	cxa_default_handlers.cpp
+  	cxa_demangle.cpp
+  	cxa_exception_storage.cpp
+  	cxa_guard.cpp
+  	cxa_handlers.cpp
+  	cxa_unexpected.cpp
+  	cxa_vector.cpp
+  	cxa_virtual.cpp
+  	stdlib_exception.cpp
+  	stdlib_stdexcept.cpp
+  	stdlib_typeinfo.cpp
+  	abort_message.cpp
+  	fallback_malloc.cpp
+	private_typeinfo.cpp
+	stdlib_new_delete.cpp
+	cxa_noexception.cpp
+	;
+
+local kernelCxxSources =
+	new.cpp
+	;
+
+KernelMergeObject kernel_libunwind.o :
+	$(kernelUnwindSources)
+	: $(TARGET_KERNEL_PIC_CCFLAGS) -fno-exceptions -funwind-tables
+	;
+
+KernelMergeObject kernel_cxxabi.o :
+	$(kernelCxxAbiSources)
+	: $(TARGET_KERNEL_PIC_CCFLAGS) -fno-exceptions -funwind-tables -D_LIBCPP_HAS_THREAD_API_EXTERNAL=1 -D_LIBCPP_DISABLE_EXTERN_TEMPLATE=1 -DLIBCXXABI_USE_LLVM_UNWINDER=1 -D_LIBCXXABI_NO_EXCEPTIONS=1
+	;
+
+KernelMergeObject kernel_cxx.o :
+	$(kernelCxxSources)
+	: $(TARGET_KERNEL_PIC_CCFLAGS) -fno-exceptions -funwind-tables -D_LIBCPP_HAS_THREAD_API_EXTERNAL=1 -DLIBCXX_BUILDING_LIBCXXABI=1 -D_LIBCPP_DISABLE_NEW_DELETE_DEFINITIONS=1
+	;
+
+SEARCH on [ FGristFiles $(kernelUnwindSources) ]
+	= [ FDirName $(HAIKU_TOP) src libs unwind src ] ;
+	
+SEARCH on [ FGristFiles $(kernelCxxAbiSources) ]
+	= [ FDirName $(HAIKU_TOP) src libs libc++abi src ] ;
+	
+SEARCH on [ FGristFiles $(kernelCxxSources) ]
+	= [ FDirName $(HAIKU_TOP) src libs libcxx src ] ;
+
 KernelMergeObject kernel_util.o :
 	AVLTreeBase.cpp
 	Bitmap.cpp
 	hostname.cpp
 	inet_addr.c
 	inet_ntop.c
-	kernel_cpp.cpp
 	KernelReferenceable.cpp
 	list.cpp
 	queue.cpp
@@ -16,6 +76,10 @@ KernelMergeObject kernel_util.o :
 	RadixBitmap.cpp
 	Random.cpp
 	StringHash.cpp
+	kernel_cpp.cpp
 
-	: $(TARGET_KERNEL_PIC_CCFLAGS) -DUSING_LIBGCC
+	: $(TARGET_KERNEL_PIC_CCFLAGS)
+	:
+	  kernel_cxxabi.o
+	  kernel_cxx.o
 ;

@@ -26,6 +26,7 @@
 #include <thread.h>
 #include <util/AutoLock.h>
 
+#include <__external_threading>
 
 struct mutex_waiter {
 	Thread*			thread;
@@ -964,3 +965,48 @@ lock_debug_init()
 		"Prints info about the specified rw lock.\n"
 		"  <lock>  - pointer to the rw lock to print the info for.\n", 0);
 }
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+int __libcpp_recursive_mutex_init(__libcpp_recursive_mutex_t *__m) {
+	recursive_lock_init(__m, "libc++ lock");
+	return 0;
+}
+
+int __libcpp_recursive_mutex_lock(__libcpp_recursive_mutex_t *__m) {
+	return recursive_lock_lock(__m);
+}
+
+bool __libcpp_recursive_mutex_trylock(__libcpp_recursive_mutex_t *__m) {
+	return recursive_lock_trylock(__m) == 0;
+}
+
+int __libcpp_recursive_mutex_unlock(__libcpp_recursive_mutex_t *__m) {
+	recursive_lock_unlock(__m);
+	return 0;
+}
+
+int __libcpp_recursive_mutex_destroy(__libcpp_recursive_mutex_t *__m) {
+	recursive_lock_destroy(__m);
+	return 0;
+}
+
+int __libcpp_mutex_lock(__libcpp_mutex_t *__m) {
+	return recursive_lock_lock(__m);
+}
+
+bool __libcpp_mutex_trylock(__libcpp_mutex_t *__m) {
+	return recursive_lock_trylock(__m) == 0;
+}
+
+int __libcpp_mutex_unlock(__libcpp_mutex_t *__m) {
+	recursive_lock_unlock(__m);
+	return 0;
+}
+
+int __libcpp_mutex_destroy(__libcpp_mutex_t *__m) {
+	recursive_lock_destroy(__m);
+	return 0;
+}
+
+_LIBCPP_END_NAMESPACE_STD

@@ -13,12 +13,17 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			# for "PathBuffer.h"
 		UsePrivateSystemHeaders ;
 
+		SubDirSysHdrs $(HAIKU_TOP) src libs unwind include ;
+		SubDirSysHdrs $(HAIKU_TOP) src libs libc++abi include ;
+
 		ObjectHdrs find_directory.cpp : $(HAIKU_TOP)/src/system/libroot/os ;
+
+		local libCxxBaseDir = [ FDirName $(HAIKU_TOP) src libs libcxx include ] ;
 
 		# Don't let gcc inject built-in function code. This will cause
 		# dependencies to libroot, which we don't link against.
 		SubDirCcFlags -fno-builtin ;
-		SubDirC++Flags -fno-builtin -fno-exceptions ;
+		SubDirC++Flags -fno-builtin -fno-exceptions -I$(libCxxBaseDir) -Wno-error ;
 
 		DEFINES +=
 			KMESSAGE_CONTAINER_ONLY
@@ -29,12 +34,37 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 		AddResources [ MultiArchDefaultGristFiles runtime_loader ]
 			: runtime_loader.rdef ;
 
+		local loaderCxxAbiSources =
+		  	cxa_aux_runtime.cpp
+		  	cxa_default_handlers.cpp
+		  	cxa_demangle.cpp
+		  	cxa_exception_storage.cpp
+		  	cxa_guard.cpp
+		  	cxa_handlers.cpp
+		  	cxa_unexpected.cpp
+		  	cxa_vector.cpp
+		  	cxa_virtual.cpp
+		  	stdlib_exception.cpp
+		  	stdlib_stdexcept.cpp
+		  	stdlib_typeinfo.cpp
+		  	abort_message.cpp
+		  	fallback_malloc.cpp
+			private_typeinfo.cpp
+			stdlib_new_delete.cpp
+			cxa_noexception.cpp
+			;
+		
+		local loaderCxxSources =
+			new.cpp
+			;
+
 		# needed for "runtime_loader" only
 		StaticLibrary <$(architecture)>libruntime_loader.a :
 			kernel_vsprintf.cpp
 			kernel_cpp.cpp
 			KMessage.cpp
 			find_directory.cpp
+			$(loaderCxxSources)
 			:
 			<src!system!libroot!os!$(architecture)>mutex.o
 			<src!system!libroot!os!$(architecture)>recursive_lock.o
@@ -78,6 +108,10 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			= [ FDirName $(HAIKU_TOP) src system kernel messaging ] ;
 		SEARCH on [ FGristFiles find_directory.cpp ]
 			= [ FDirName $(HAIKU_TOP) src system libroot os ] ;
+		SEARCH on [ FGristFiles $(loaderCxxAbiSources) ]
+			= [ FDirName $(HAIKU_TOP) src libs libc++abi src ] ;
+		SEARCH on [ FGristFiles $(loaderCxxSources) ]
+			= [ FDirName $(HAIKU_TOP) src libs libcxx src ] ;
 
 		local sources =
 			add_ons.cpp
@@ -102,9 +136,6 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			[ FGristFiles $(sources:S=$(SUFOBJ)) ]
 			<$(architecture)>libruntime_loader.a
 			<$(architecture)>libruntime_loader_$(TARGET_ARCH).a
-			[ TargetKernelLibsupc++ ]
-			[ TargetKernelLibgcc ]
-			[ TargetKernelLibgcceh ]
 			: $(HAIKU_TOP)/src/system/ldscripts/$(TARGET_ARCH)/runtime_loader.ld
 			: --no-undefined -shared -soname=runtime_loader
 		;

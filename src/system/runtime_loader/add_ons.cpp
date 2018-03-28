@@ -6,6 +6,7 @@
 #include "add_ons.h"
 
 #include <util/kernel_cpp.h>
+#include <new>
 
 #include "runtime_loader_private.h"
 
@@ -41,7 +42,7 @@ register_defined_symbol_patcher(struct image_t* image,
 	runtime_loader_symbol_patcher* _patcher, void* cookie)
 {
 	RuntimeLoaderSymbolPatcher* patcher
-		= new(mynothrow) RuntimeLoaderSymbolPatcher(_patcher, cookie);
+		= new(std::nothrow) RuntimeLoaderSymbolPatcher(_patcher, cookie);
 	if (patcher == NULL)
 		return B_NO_MEMORY;
 
@@ -74,7 +75,7 @@ register_undefined_symbol_patcher(struct image_t* image,
 	runtime_loader_symbol_patcher* _patcher, void* cookie)
 {
 	RuntimeLoaderSymbolPatcher* patcher
-		= new(mynothrow) RuntimeLoaderSymbolPatcher(_patcher, cookie);
+		= new(std::nothrow) RuntimeLoaderSymbolPatcher(_patcher, cookie);
 	if (patcher == NULL)
 		return B_NO_MEMORY;
 
@@ -116,7 +117,7 @@ init_add_ons()
 status_t
 add_add_on(image_t* image, runtime_loader_add_on* addOnStruct)
 {
-	RuntimeLoaderAddOn* addOn = new(mynothrow) RuntimeLoaderAddOn(image,
+	RuntimeLoaderAddOn* addOn = new(std::nothrow) RuntimeLoaderAddOn(image,
 		addOnStruct);
 	if (addOn == NULL)
 		return B_NO_MEMORY;
