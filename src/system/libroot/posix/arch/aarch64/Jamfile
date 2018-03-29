@@ -10,6 +10,7 @@ for architectureObject in [ MultiArchSubDirSetup aarch64 ] {
 		local genericSources =
 			setjmp_save_sigs.c
 			longjmp_return.c
+			setjmp.S
 			;
 
 		MergeObject <$(architecture)>posix_arch_$(TARGET_ARCH).o :
