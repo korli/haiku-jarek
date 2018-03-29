@@ -9,6 +9,7 @@
 #include <memory>
 #include <cassert>
 #include <new>
+#include <algorithm>
 
 #include <kernel/kernel.h>
 #include <kernel/boot/memory.h>
