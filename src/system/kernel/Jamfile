@@ -123,6 +123,7 @@ KernelLd kernel_$(TARGET_ARCH) :
 	kernel_lib_posix.o
 	kernel_lib_posix_arch_$(TARGET_ARCH).o
 	kernel_misc.o
+	kernel_compiler_rt_$(TARGET_ARCH).o
 
 	: $(HAIKU_TOP)/src/system/ldscripts/$(TARGET_ARCH)/kernel.ld
 	: -Bdynamic -export-dynamic -dynamic-linker /foo/bar
