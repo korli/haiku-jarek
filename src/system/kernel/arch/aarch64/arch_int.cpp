@@ -17,6 +17,31 @@
 
 #include <stdio.h>
 
+extern "C" void do_el1h_sync(iframe * frame)
+{
+	for(;;);
+}
+
+extern "C" void intr_irq_handler(iframe * frame)
+{
+	for(;;);
+}
+
+extern "C" void do_el1h_error(iframe * frame)
+{
+	for(;;);
+}
+
+extern "C" void do_el0_sync(iframe * frame)
+{
+	for(;;);
+}
+
+extern "C" void do_el0_error(iframe * frame)
+{
+	for(;;);
+}
+
 void
 arch_int_enable_io_interrupt(int irq)
 {

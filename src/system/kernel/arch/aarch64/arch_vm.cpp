@@ -24,6 +24,8 @@
 #include <arch/int.h>
 #include <arch/cpu.h>
 
+#include "AArch64PagingMethod.h"
+
 status_t
 arch_vm_init(kernel_args *args)
 {

@@ -8,10 +8,12 @@
 #include <boot/kernel_args.h>
 #include <safemode.h>
 
+#include "AArch64PagingMethod.h"
+
 status_t
 arch_vm_translation_map_create_map(bool kernel, VMTranslationMap** _map)
 {
-	return B_OK;
+	return AArch64PagingMethod::CreateTranslationMap(kernel, _map);
 }
 
 
@@ -19,7 +21,7 @@ status_t
 arch_vm_translation_map_init(kernel_args *args,
 	VMPhysicalPageMapper** _physicalPageMapper)
 {
-	return B_OK;
+	return AArch64PagingMethod::Init(args, _physicalPageMapper);
 }
 
 
@@ -33,7 +35,7 @@ arch_vm_translation_map_init_post_sem(kernel_args *args)
 status_t
 arch_vm_translation_map_init_post_area(kernel_args *args)
 {
-	return B_OK;
+	return AArch64PagingMethod::InitPostArea(args);
 }
 
 
@@ -41,7 +43,7 @@ status_t
 arch_vm_translation_map_early_map(kernel_args *args, addr_t va, phys_addr_t pa,
 	uint8 attributes, phys_addr_t (*get_free_page)(kernel_args *))
 {
-	return B_OK;
+	return AArch64PagingMethod::MapEarly(args, va, pa, attributes, get_free_page);
 }
 
 
@@ -61,5 +63,5 @@ bool
 arch_vm_translation_map_is_kernel_page_accessible(addr_t virtualAddress,
 	uint32 protection)
 {
-	return false;
+	return AArch64PagingMethod::IsKernelPageAccessible(virtualAddress, protection);
 }

@@ -5,8 +5,8 @@
 
 #include <asm_defs.h>
 
+#include "asm_offsets.h"
 #include "syscall_numbers.h"
-
 
 .text
 
@@ -25,3 +25,153 @@ END(_arch_cpu_user_memset)
 ENTRY(_arch_cpu_user_strlcpy)
 	ret
 END(_arch_cpu_user_strlcpy)
+
+.text
+
+.macro SAVE_REGISTERS el
+	sub 	sp,  sp, #(IFRAME_sizeof)
+	stp	    x0,  x1, [sp, #(IFRAME_x + 0 * 8)]
+	stp	    x2,  x3, [sp, #(IFRAME_x + 2 * 8)]
+	stp	    x4,  x5, [sp, #(IFRAME_x + 4 * 8)]
+	stp	    x6,  x7, [sp, #(IFRAME_x + 6 * 8)]
+	stp	    x8,  x9, [sp, #(IFRAME_x + 8 * 8)]
+	stp	   x10, x11, [sp, #(IFRAME_x + 10 * 8)]
+	stp	   x12, x13, [sp, #(IFRAME_x + 12 * 8)]
+	stp	   x14, x15, [sp, #(IFRAME_x + 14 * 8)]
+	stp	   x16, x17, [sp, #(IFRAME_x + 16 * 8)]
+	stp	   x18, x19, [sp, #(IFRAME_x + 18 * 8)]
+	stp	   x20, x21, [sp, #(IFRAME_x + 20 * 8)]
+	stp	   x22, x23, [sp, #(IFRAME_x + 22 * 8)]
+	stp	   x24, x25, [sp, #(IFRAME_x + 24 * 8)]
+	stp	   x26, x27, [sp, #(IFRAME_x + 26 * 8)]
+	stp	   x28, x29, [sp, #(IFRAME_x + 28 * 8)]
+	mrs	   x10, elr_el1
+	mrs	   x11, spsr_el1
+	mrs	   x12, esr_el1
+.if \el == 0
+	mrs	   x13, sp_el0
+.else
+	mov	   x13, sp
+.endif
+	str	   x10, [sp, #(IFRAME_elr)]
+	stp	   w11, w12, [sp, #(IFRAME_spsr)]
+	stp	   x13, x30, [sp, #(IFRAME_sp)]
+.endm
+
+.macro RESTORE_REGISTERS el
+.if \el == 1
+	msr	   daifset, #2
+.endif
+	ldp	   x13, x30, [sp, #(IFRAME_sp)]
+	ldp	   x10, x11, [sp, #(IFRAME_elr)]
+.if \el == 0
+	msr	   sp_el0, x13
+.endif
+	msr	   spsr_el1, x11
+	msr	   elr_el1, x10
+	ldp	    x0,  x1, [sp, #(IFRAME_x + 0 * 8)]
+	ldp	    x2,  x3, [sp, #(IFRAME_x + 2 * 8)]
+	ldp	    x4,  x5, [sp, #(IFRAME_x + 4 * 8)]
+	ldp	    x6,  x7, [sp, #(IFRAME_x + 6 * 8)]
+	ldp	    x8,  x9, [sp, #(IFRAME_x + 8 * 8)]
+	ldp	   x10, x11, [sp, #(IFRAME_x + 10 * 8)]
+	ldp	   x12, x13, [sp, #(IFRAME_x + 12 * 8)]
+	ldp	   x14, x15, [sp, #(IFRAME_x + 14 * 8)]
+	ldp	   x16, x17, [sp, #(IFRAME_x + 16 * 8)]
+.if \el == 0
+	ldp	   x18, x19, [sp, #(IFRAME_x + 18 * 8)]
+	ldp	   x20, x21, [sp, #(IFRAME_x + 20 * 8)]
+	ldp	   x22, x23, [sp, #(IFRAME_x + 22 * 8)]
+	ldp	   x24, x25, [sp, #(IFRAME_x + 24 * 8)]
+	ldp	   x26, x27, [sp, #(IFRAME_x + 26 * 8)]
+	ldp	   x28, x29, [sp, #(IFRAME_x + 28 * 8)]
+.else
+	ldr	   x29, [sp, #(IFRAME_x + 29 * 8)]
+.endif
+.endm
+
+.macro	vector	name
+	.align 7
+	b	handle_\name
+.endm
+
+.macro	vempty
+	.align 7
+	brk	0xfff
+	1: b	1b
+.endm
+
+	.text
+	.align 11
+	.globl exception_vectors
+exception_vectors:
+	vempty			/* Synchronous EL1t */
+	vempty			/* IRQ EL1t */
+	vempty			/* FIQ EL1t */
+	vempty			/* Error EL1t */
+
+	vector el1h_sync	/* Synchronous EL1h */
+	vector el1h_irq		/* IRQ EL1h */
+	vempty			/* FIQ EL1h */
+	vector el1h_error	/* Error EL1h */
+
+	vector el0_sync		/* Synchronous 64-bit EL0 */
+	vector el0_irq		/* IRQ 64-bit EL0 */
+	vempty			/* FIQ 64-bit EL0 */
+	vector el0_error	/* Error 64-bit EL0 */
+
+	vector el0_sync		/* Synchronous 32-bit EL0 */
+	vector el0_irq		/* IRQ 32-bit EL0 */
+	vempty			/* FIQ 32-bit EL0 */
+	vector el0_error	/* Error 32-bit EL0 */
+
+
+	.text
+
+ENTRY(handle_el1h_sync)
+	SAVE_REGISTERS 1
+	mov	x0, sp
+	bl	do_el1h_sync
+	RESTORE_REGISTERS 1
+	eret
+END(handle_el1h_sync)
+
+ENTRY(handle_el1h_irq)
+	SAVE_REGISTERS 1
+	mov	x0, sp
+	bl	intr_irq_handler
+	RESTORE_REGISTERS 1
+	eret
+END(handle_el1h_irq)
+
+ENTRY(handle_el1h_error)
+	SAVE_REGISTERS 1
+	mov	x0, sp
+	bl	do_el1h_error
+	RESTORE_REGISTERS 1
+	eret
+END(handle_el1h_error)
+
+ENTRY(handle_el0_sync)
+	SAVE_REGISTERS 0
+	mov	x0, sp
+	bl	do_el0_sync
+	RESTORE_REGISTERS 0
+	eret
+END(handle_el0_sync)
+
+ENTRY(handle_el0_irq)
+	SAVE_REGISTERS 0
+	mov	x0, sp
+	bl	intr_irq_handler
+	RESTORE_REGISTERS 0
+	eret
+END(handle_el0_irq)
+
+ENTRY(handle_el0_error)
+	SAVE_REGISTERS 0
+	mov	x0, sp
+	bl	do_el0_error
+	RESTORE_REGISTERS 0
+	eret
+END(handle_el0_error)
