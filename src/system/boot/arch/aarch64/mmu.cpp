@@ -1022,4 +1022,17 @@ void arch_init_mmu(stage2_args * args)
 	gBootVirtualMemoryMapper = &sAArch64VirtualMemoryMapper;
 
 	gBootKernelVirtualRegionAllocator.Init(KERNEL_BASE, KERNEL_BASE + KERNEL_SIZE);
+
+	gBootKernelVirtualRegionAllocator.AllocateVirtualMemoryRegion(&gKernelArgs.arch_args.pgdir_vir,
+			B_PAGE_SIZE,
+			B_PAGE_SIZE,
+			false,
+			true);
+
+	gKernelArgs.arch_args.pgdir_phys = gAArch64PageDirectoryPhysicalTTBR1;
+
+	sAArch64VirtualMemoryMapper.MapVirtualMemoryRegion((addr_t)gKernelArgs.arch_args.pgdir_vir,
+			gKernelArgs.arch_args.pgdir_phys,
+			B_PAGE_SIZE,
+			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
 }

@@ -586,6 +586,9 @@
 #define	TCR_IPS_44BIT	(4 << TCR_IPS_SHIFT)
 #define	TCR_IPS_48BIT	(5 << TCR_IPS_SHIFT)
 
+#define TCR_A1			(1 << 22)
+#define TCR_A0			(0 << 22)
+
 #define	TCR_TG1_SHIFT	30
 #define	TCR_TG1_16K	(1 << TCR_TG1_SHIFT)
 #define	TCR_TG1_4K	(2 << TCR_TG1_SHIFT)
