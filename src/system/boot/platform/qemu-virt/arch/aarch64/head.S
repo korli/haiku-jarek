@@ -33,3 +33,11 @@ real_start:
 boot_stack_begin:
 	.space		16384
 boot_stack_end:
+
+.text
+
+.globl __arch_enter_kernel
+.type __arch_enter_kernel, #function
+__arch_enter_kernel:
+	mov	sp, x1
+	br x2

@@ -12,6 +12,8 @@
 
 #include <string.h>
 #include <assert.h>
+#include <sys/cdefs.h>
+#include <system/vm_defs.h>
 
 #include "cpu.h"
 #include "serial.h"
@@ -19,9 +21,34 @@
 
 static uint32 sBootOptions = BOOT_OPTION_MENU | BOOT_OPTION_DEBUG_OUTPUT;
 
+extern "C" void __arch_enter_kernel(void * args, addr_t sp, addr_t entry) __dead2;
+
 extern "C" void
 platform_start_kernel(void)
 {
+	addr_t stackTop = gKernelArgs.cpu_kstack[0].start + gKernelArgs.cpu_kstack[0].size;
+	addr_t entry;
+
+	// 64-bit kernel entry is all handled in long.cpp
+	if (gKernelArgs.kernel_image->elf_class == ELFCLASS64) {
+		preloaded_elf64_image *image = static_cast<preloaded_elf64_image *>(gKernelArgs.kernel_image.Pointer());
+		entry = image->elf_header.e_entry;
+	} else {
+		preloaded_elf32_image *image = static_cast<preloaded_elf32_image *>(gKernelArgs.kernel_image.Pointer());
+		entry = image->elf_header.e_entry;
+	}
+
+	gBootPhysicalMemoryAllocator->GenerateKernelArguments();
+	gBootKernelVirtualRegionAllocator.GenerateKernelArguments();
+
+	// We're about to enter the kernel -- disable console output.
+	stdout = NULL;
+
+	dprintf("kernel entry at %" B_PRIx64 "\n", entry);
+
+	__arch_enter_kernel(&gKernelArgs, stackTop, entry);
+
+	panic("kernel returned!\n");
 }
 
 
@@ -112,6 +139,34 @@ extern "C" void _plat_start(const void * dtb_phys)
 
 	serial_init(fdt::Node(args.platform.fdt_virt));
 	console_init();
+
+	for(uint32 i = 0 ; i < gKernelArgs.num_cpus ; ++i) {
+		void * spBase;
+		status_t error = gBootKernelVirtualRegionAllocator.AllocateVirtualMemoryRegion(&spBase,
+				KERNEL_STACK_SIZE + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE,
+				KERNEL_STACK_SIZE + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE,
+				false,
+				true);
+
+		assert(error == B_OK);
+
+		uint64 cpu_stack_phys = 0;
+
+		error = gBootPhysicalMemoryAllocator->AllocatePhysicalMemory(KERNEL_STACK_SIZE,
+				B_PAGE_SIZE,
+				cpu_stack_phys);
+
+		assert(error == B_OK);
+
+		error = gBootVirtualMemoryMapper->MapVirtualMemoryRegion(
+				(addr_t)spBase + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE, cpu_stack_phys,
+				KERNEL_STACK_SIZE, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA | B_KERNEL_STACK_AREA);
+
+		assert(error == B_OK);
+
+		gKernelArgs.cpu_kstack[i].start = (addr_t)spBase;
+		gKernelArgs.cpu_kstack[i].size = KERNEL_STACK_SIZE + KERNEL_STACK_GUARD_PAGES * B_PAGE_SIZE;
+	}
 
 	main(&args);
 
