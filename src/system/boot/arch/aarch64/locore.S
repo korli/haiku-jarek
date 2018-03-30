@@ -139,6 +139,9 @@ ENTRY(aarch64_locore_init)
 	orr		x10, x10, #CPACR_FPEN_TRAP_NONE
 	msr		cpacr_el1, x10
 
+	/* Disable IRQs */
+	msr		daifset, #0xf
+
 	ret
 END(aarch64_locore_init)
 
