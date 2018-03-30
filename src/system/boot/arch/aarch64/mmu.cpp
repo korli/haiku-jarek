@@ -321,6 +321,8 @@ template<typename _Translator> status_t aarch64_level0_remap(
 		}
 	}
 
+	__asm__ __volatile__("tlbi vmalle1is");
+
 	return 0;
 }
 
@@ -496,6 +498,8 @@ static status_t aarch64_level0_unmap(uint64 * level0,
 			return error;
 		}
 	}
+
+	__asm__ __volatile__("tlbi vmalle1is");
 
 	return B_OK;
 }
@@ -685,6 +689,8 @@ static status_t aarch64_level0_protect(uint64 * level0,
 		}
 	}
 
+	__asm__ __volatile__("tlbi vmalle1is");
+
 	return B_OK;
 }
 static inline uint64 build_page_protection(uint32 prot, uint32 memory_type)
@@ -758,7 +764,7 @@ public:
 		return aarch64_level0_protect(_ChooseTTBR(virtualAddress),
 				virtualAddress,
 				size,
-				protection);
+				build_page_protection(protection, protection & B_MTR_MASK));
 	}
 
 	virtual status_t UnmapVirtualMemoryRegion(uint64 virtualAddress,
