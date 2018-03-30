@@ -453,7 +453,7 @@ rule KernelArchitectureSetup architecture
 	HAIKU_KERNEL_ADDON_BEGIN_GLUE_CODE = <$(architecture)>crtbeginS.o
 		<src!system!glue!$(architecture)>haiku_version_glue.o ;
 	HAIKU_KERNEL_ADDON_END_GLUE_CODE = <$(architecture)>crtendS.o ;
-	HAIKU_BOOT_LDFLAGS += --gc-sections ;
+	HAIKU_BOOT_LDFLAGS += --gc-sections -Bsymbolic ;
 }
 
 
