@@ -39,7 +39,7 @@ static inline bool arch_int_are_interrupts_enabled_inline(void)
 {
 	int flags;
 	__asm__ __volatile__("mrs %0, daif" : "=r"(flags));
-	return (flags & 0x2) == 0;
+	return (flags & PSR_I) == 0;
 }
 
 // map the functions to the inline versions
