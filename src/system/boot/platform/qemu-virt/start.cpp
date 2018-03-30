@@ -21,7 +21,7 @@
 
 static uint32 sBootOptions = BOOT_OPTION_MENU | BOOT_OPTION_DEBUG_OUTPUT;
 
-extern "C" void __arch_enter_kernel(void * args, addr_t sp, addr_t entry) __dead2;
+extern "C" void __arch_enter_kernel(void * args, int cpuIndex, addr_t sp, addr_t entry) __dead2;
 
 extern "C" void
 platform_start_kernel(void)
@@ -46,7 +46,7 @@ platform_start_kernel(void)
 
 	dprintf("kernel entry at %" B_PRIx64 "\n", entry);
 
-	__arch_enter_kernel(&gKernelArgs, stackTop, entry);
+	__arch_enter_kernel(&gKernelArgs, 0, stackTop, entry);
 
 	panic("kernel returned!\n");
 }

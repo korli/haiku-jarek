@@ -39,5 +39,5 @@ boot_stack_end:
 .globl __arch_enter_kernel
 .type __arch_enter_kernel, #function
 __arch_enter_kernel:
-	mov	sp, x1
-	br x2
+	mov	sp, x2
+	br x3
