@@ -17,6 +17,7 @@
 #include "AArch64PagingMethod.h"
 #include "AArch64PagingStructures.h"
 #include "AArch64PhysicalPageMapper.h"
+#include "AArch64VMTranslationMap.h"
 
 #include <new>
 #include <memory>
@@ -44,28 +45,28 @@ status_t AArch64PagingMethod::Init(kernel_args * args, VMPhysicalPageMapper ** _
 
 status_t AArch64PagingMethod::InitPostArea(kernel_args * args)
 {
-	void * address = (void *)DMAP_BASE;
-	area_id area = vm_create_null_area(VMAddressSpace::KernelID(),
-			"physical cached map area",
-			&address,
-			B_EXACT_ADDRESS,
-			DMAP_END - DMAP_BASE,
-			0);
-	if(area < B_OK)
-		return area;
+//	void * address = (void *)DMAP_BASE;
+//	area_id area = vm_create_null_area(VMAddressSpace::KernelID(),
+//			"physical cached map area",
+//			&address,
+//			B_EXACT_ADDRESS,
+//			DMAP_END - DMAP_BASE,
+//			0);
+//	if(area < B_OK)
+//		return area;
+//
+//	address = (void *)UMAP_BASE;
+//	area = vm_create_null_area(VMAddressSpace::KernelID(),
+//			"physical device map area",
+//			&address,
+//			B_EXACT_ADDRESS,
+//			UMAP_END - UMAP_BASE,
+//			0);
+//	if(area < B_OK)
+//		return area;
 
-	address = (void *)UMAP_BASE;
-	area = vm_create_null_area(VMAddressSpace::KernelID(),
-			"physical device map area",
-			&address,
-			B_EXACT_ADDRESS,
-			UMAP_END - UMAP_BASE,
-			0);
-	if(area < B_OK)
-		return area;
-
-	address = (void *)fKernelVirtualPgDir;
-	area = create_area("kernel ttb",
+	void * address = (void *)fKernelVirtualPgDir;
+	area_id area = create_area("kernel ttb",
 			&address,
 			B_EXACT_ADDRESS,
 			B_PAGE_SIZE,
@@ -80,7 +81,20 @@ status_t AArch64PagingMethod::InitPostArea(kernel_args * args)
 
 status_t AArch64PagingMethod::CreateTranslationMap(bool kernel, VMTranslationMap ** _map)
 {
-	return B_NO_MEMORY;
+	AArch64VMTranslationMap * map = new(std::nothrow) AArch64VMTranslationMap();
+
+	if(!map)
+		return B_NO_MEMORY;
+
+	status_t error = map->Init(kernel);
+
+	if(error != B_OK) {
+		delete map;
+		return error;
+	}
+
+	*_map = map;
+	return B_OK;
 }
 
 static void aarch64_promote_mapping(

@@ -25,6 +25,7 @@ KernelMergeObject kernel_arch_aarch64.o :
 	AArch64PagingStructures.cpp
 	AArch64PhysicalPageMapper.cpp
 	AArch64PagingMethod.cpp
+	AArch64VMTranslationMap.cpp
 	:
 	$(TARGET_KERNEL_PIC_CCFLAGS)
 ;

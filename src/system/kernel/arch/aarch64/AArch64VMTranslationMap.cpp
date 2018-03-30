@@ -1,0 +1,322 @@
+/*
+ * Copyright 2018, Jaroslaw Pelczar <jarek@jpelczar.com>
+ * Distributed under the terms of the MIT License.
+ */
+
+#include "AArch64VMTranslationMap.h"
+
+#include <int.h>
+#include <slab/Slab.h>
+#include <thread.h>
+#include <util/AutoLock.h>
+#include <vm/vm_page.h>
+#include <vm/VMAddressSpace.h>
+#include <vm/VMCache.h>
+
+#include "AArch64PagingStructures.h"
+#include "AArch64PagingMethod.h"
+#include "AArch64PhysicalPageMapper.h"
+
+#include <kernel/arch/aarch64/armreg.h>
+#include <kernel/arch/aarch64/pte.h>
+
+#include <new>
+
+AArch64VMTranslationMap::AArch64VMTranslationMap() {
+}
+
+AArch64VMTranslationMap::~AArch64VMTranslationMap() {
+	if(fPageMapper) {
+		uint64 * l0 = fPagingStructures->virtual_pgdir;
+		phys_addr_t address;
+		vm_page* page;
+		for(uint32 l0_index = 0 ; l0_index < L0_ENTRIES ; ++l0_index)
+		{
+			if((l0[l0_index] & ATTR_DESCR_MASK) != L0_TABLE)
+				continue;
+
+			uint64 * l1 = (uint64 *)fPageMapper->GetPageTableAt(l0[l0_index] & ~ATTR_MASK);
+
+			for(uint32 l1_index = 0 ; l1_index < Ln_ENTRIES ; ++l1_index) {
+				if((l1[l1_index] & ATTR_DESCR_MASK) != L0_TABLE)
+					continue;
+
+				uint64 * l2 = (uint64 *)fPageMapper->GetPageTableAt(l1[l1_index] & ~ATTR_MASK);
+
+				for(uint32 l2_index = 0 ; l2_index < Ln_ENTRIES ; ++l2_index) {
+					if((l2[l2_index] & ATTR_DESCR_MASK) != L0_TABLE)
+						continue;
+
+					address = l2[l2_index] & ~ATTR_MASK;
+					page = vm_lookup_page(address / B_PAGE_SIZE);
+
+					if(!page) {
+						panic("Incorrect page in page tables at level 2");
+					}
+
+					DEBUG_PAGE_ACCESS_START(page);
+					vm_page_set_state(page, PAGE_STATE_FREE);
+				}
+
+				address = l1[l1_index] & ~ATTR_MASK;
+				page = vm_lookup_page(address / B_PAGE_SIZE);
+
+				if(!page) {
+					panic("Incorrect page in page tables at level 1");
+				}
+
+				DEBUG_PAGE_ACCESS_START(page);
+				vm_page_set_state(page, PAGE_STATE_FREE);
+			}
+
+			address = l0[l0_index] & ~ATTR_MASK;
+			page = vm_lookup_page(address / B_PAGE_SIZE);
+
+			if(!page) {
+				panic("Incorrect page in page tables at level 0");
+			}
+
+			DEBUG_PAGE_ACCESS_START(page);
+			vm_page_set_state(page, PAGE_STATE_FREE);
+		}
+	}
+
+	if(fPagingStructures) {
+		fPagingStructures->RemoveReference();
+	}
+
+	if(fPageMapper) {
+		fPageMapper->Delete();
+	}
+}
+
+status_t AArch64VMTranslationMap::Init(bool kernel)
+{
+	fIsKernelMap = kernel;
+
+	fPagingStructures = new(std::nothrow) AArch64PagingStructures();
+	if(!fPagingStructures)
+		return B_NO_MEMORY;
+
+	if(kernel) {
+		fPageMapper = AArch64PagingMethod::fKernelPhysicalPageMapper;
+		fPagingStructures->Init(AArch64PagingMethod::fKernelVirtualPgDir,
+				AArch64PagingMethod::fKernelPhysicalPgDir);
+
+		fPagingStructures->InitKernelASID();
+	} else {
+		fPageMapper = new(std::nothrow) TranslationMapPhysicalPageMapper();
+		if(!fPageMapper)
+			return B_NO_MEMORY;
+
+		uint64 * level0 = (uint64 *)memalign(B_PAGE_SIZE, B_PAGE_SIZE);
+		if(!level0)
+			return B_NO_MEMORY;
+
+		memset(level0, 0, B_PAGE_SIZE);
+
+		// Look up the PML4 physical address.
+		phys_addr_t physicalPageDir;
+		vm_get_page_mapping(VMAddressSpace::KernelID(), (addr_t)level0, &physicalPageDir);
+
+		fPagingStructures->Init(level0, physicalPageDir);
+
+		if(!fPagingStructures->AllocateASID()) {
+			return B_NO_MEMORY;
+		}
+	}
+
+	return B_OK;
+}
+
+bool AArch64VMTranslationMap::Lock()
+{
+	recursive_lock_lock(&fLock);
+	return true;
+}
+
+void AArch64VMTranslationMap::Unlock()
+{
+	recursive_lock_unlock(&fLock);
+}
+
+addr_t AArch64VMTranslationMap::MappedSize() const
+{
+	return fMapCount;
+}
+
+size_t AArch64VMTranslationMap::MaxPagesNeededToMap(addr_t start, addr_t end) const
+{
+	if (start == 0) {
+		start = L0_SIZE - B_PAGE_SIZE;
+		end += start;
+	}
+
+	size_t requiredL0 = end / L0_SIZE + 1 - start / L0_SIZE;
+	size_t requiredL1 = end / L1_SIZE + 1 - start / L1_SIZE;
+	size_t requiredL2 = end / L2_SIZE + 1 - start / L2_SIZE;
+
+	return requiredL0 + requiredL1 + requiredL2;
+}
+
+status_t AArch64VMTranslationMap::Map(addr_t virtualAddress, phys_addr_t physicalAddress,
+		uint32 attributes, uint32 memoryType,
+		vm_page_reservation* reservation)
+{
+
+}
+
+status_t AArch64VMTranslationMap::Unmap(addr_t start, addr_t end)
+{
+
+}
+
+status_t AArch64VMTranslationMap::DebugMarkRangePresent(addr_t start, addr_t end,
+		bool markPresent)
+{
+
+}
+
+status_t AArch64VMTranslationMap::UnmapPage(VMArea* area, addr_t address,
+		bool updatePageQueue)
+{
+
+}
+
+void AArch64VMTranslationMap::UnmapPages(VMArea* area, addr_t base, size_t size,
+		bool updatePageQueue)
+{
+
+}
+
+void AArch64VMTranslationMap::UnmapArea(VMArea* area, bool deletingAddressSpace,
+		bool ignoreTopCachePageFlags)
+{
+
+}
+
+static uint32 DecodeProtection(uint64 value)
+{
+	uint32 protection = B_KERNEL_READ_AREA;
+
+	if(value & 1)
+		protection |= PAGE_PRESENT;
+	if(value & ATTR_AF)
+		protection |= PAGE_ACCESSED;
+	if(value & ATTR_SW_DIRTY)
+		protection |= PAGE_MODIFIED;
+	if(!(value & ATTR_AP(ATTR_AP_RO)))
+		protection |= B_KERNEL_WRITE_AREA;
+	if(value & ATTR_AP(ATTR_AP_USER)) {
+		protection |= B_READ_AREA;
+		if(!(value & ATTR_AP(ATTR_AP_RO)))
+			protection |= B_WRITE_AREA;
+	}
+	if(!(value & ATTR_UXN))
+		protection |= B_EXECUTE_AREA;
+	if(!(value & ATTR_PXN))
+		protection |= B_KERNEL_EXECUTE_AREA;
+
+	return protection;
+}
+
+status_t AArch64VMTranslationMap::Query(addr_t virtualAddress, phys_addr_t* _physicalAddress,
+		uint32* _flags)
+{
+	*_flags = 0;
+	*_physicalAddress = 0;
+
+	if(fIsKernelMap) {
+		if(virtualAddress < KERNEL_BASE) {
+			return B_BAD_ADDRESS;
+		}
+	} else {
+		if(virtualAddress > USER_TOP) {
+			return B_BAD_ADDRESS;
+		}
+	}
+
+	int l0_index = pmap_l0_index(virtualAddress);
+	int l1_index = pmap_l1_index(virtualAddress);
+	int l2_index = pmap_l2_index(virtualAddress);
+	int l3_index = pmap_l3_index(virtualAddress);
+
+	uint64 * l0 = fPagingStructures->virtual_pgdir;
+	uint64 * l1;
+	uint64 * l2;
+	uint64 * l3;
+
+	uint64 l0_value = AArch64PagingMethod::LoadTableEntry(&l0[l0_index]);
+
+	switch(l0_value & ATTR_DESCR_MASK)
+	{
+	case L0_TABLE:
+		l1 = (uint64 *)fPageMapper->GetPageTableAt(l0_value & ~ATTR_MASK);
+		break;
+	default:
+		return B_OK;
+	}
+
+	uint64 l1_value = AArch64PagingMethod::LoadTableEntry(&l1[l1_index]);
+
+	switch(l1_value & ATTR_DESCR_MASK)
+	{
+	case L1_BLOCK:
+		*_flags = DecodeProtection(l1_value);
+		*_physicalAddress = (l1_value & (~ATTR_MASK) & (~L1_OFFSET)) | (virtualAddress & L1_OFFSET);
+		return B_OK;
+	case L1_TABLE:
+		l2 = (uint64 *)fPageMapper->GetPageTableAt(l1_value & ~ATTR_MASK);
+		break;
+	default:
+		return B_OK;
+	}
+
+	uint64 l2_value = AArch64PagingMethod::LoadTableEntry(&l2[l2_index]);
+
+	switch(l2_value & ATTR_DESCR_MASK)
+	{
+	case L2_BLOCK:
+		*_flags = DecodeProtection(l2_value);
+		*_physicalAddress = (l2_value & (~ATTR_MASK) & (~L2_OFFSET)) | (virtualAddress & L2_OFFSET);
+		return B_OK;
+	case L2_TABLE:
+		l3 = (uint64 *)fPageMapper->GetPageTableAt(l2_value & ~ATTR_MASK);
+		break;
+	default:
+		return B_OK;
+	}
+
+	uint64 l3_value = AArch64PagingMethod::LoadTableEntry(&l3[l3_index]);
+
+	*_flags = DecodeProtection(l3_value);
+	*_physicalAddress = (l3_value & (~ATTR_MASK) & (~L3_OFFSET)) | (virtualAddress & L3_OFFSET);
+	return B_OK;
+}
+
+status_t AArch64VMTranslationMap::QueryInterrupt(addr_t virtualAddress,
+		phys_addr_t* _physicalAddress, uint32* _flags)
+{
+	return Query(virtualAddress, _physicalAddress, _flags);
+}
+
+status_t AArch64VMTranslationMap::Protect(addr_t base, addr_t top, uint32 attributes,
+		uint32 memoryType)
+{
+
+}
+
+status_t AArch64VMTranslationMap::ClearFlags(addr_t virtualAddress, uint32 flags)
+{
+
+}
+
+bool AArch64VMTranslationMap::ClearAccessedAndModified(VMArea* area, addr_t address,
+		bool unmapIfUnaccessed, bool& _modified)
+{
+
+}
+
+void AArch64VMTranslationMap::Flush()
+{
+}
