@@ -31,10 +31,6 @@
  *
  */
 
-#if (defined (__OPTIMIZE_SIZE__) || defined (PREFER_SIZE_OVER_SPEED))
-/* See memcpy-stub.c  */
-#else
-
 #define dstin	x0
 #define src	x1
 #define count	x2
@@ -191,5 +187,3 @@ def_fn memcpy p2align=6
 	b.ne	.Ltail63
 	ret
 	.size	memcpy, .-memcpy
-
-#endif

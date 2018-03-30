@@ -31,10 +31,6 @@
  *
  */
 
-#if (defined (__OPTIMIZE_SIZE__) || defined (PREFER_SIZE_OVER_SPEED))
-/* See memset-stub.c  */
-#else
-
 /* By default we assume that the DC instruction can be used to zero
    data blocks more efficiently.  In some circumstances this might be
    unsafe, for example in an asymmetric multiprocessor environment with
@@ -243,4 +239,3 @@ def_fn memset p2align=6
 	.space 4
 #endif
 #endif /* DONT_USE_DC */
-#endif
