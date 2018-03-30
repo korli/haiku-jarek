@@ -333,7 +333,7 @@ ELFLoader<Class>::Load(int fd, preloaded_image* _image)
 		RegionType* region = &image->regions[regionIndex];
 		++regionIndex;
 
-		TRACE(("load segment %ld (%llu bytes) mapped at %p...\n", i,
+		TRACE(("load segment %" B_PRIu32 " (%" B_PRIu64 " bytes) mapped at %p...\n", i,
 			(uint64)header.p_filesz, Class::Map(region->start)));
 
 		length = read_pos(fd, header.p_offset,
@@ -573,7 +573,7 @@ ELFLoader<Class>::_LoadSymbolTable(int fd, ImageType* image)
 		goto error3;
 	}
 
-	TRACE(("loaded %ld debug symbols\n", numSymbols));
+	TRACE(("loaded %" B_PRIu32 " debug symbols\n", numSymbols));
 
 	// insert tables into image
 	image->debug_symbols = symbolTable;
