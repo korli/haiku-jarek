@@ -52,6 +52,14 @@ struct AArch64PagingMethod {
 	static uint64 * fKernelVirtualPgDir;
 	static AArch64PhysicalPageMapper * fPhysicalPageMapper;
 	static TranslationMapPhysicalPageMapper * fKernelPhysicalPageMapper;
+
+	static uint64 * PageTableEntryForAddress(uint64 * pageDirectory,
+			addr_t virtualAddress,
+			bool isKernelMap,
+			bool allocateMemory,
+			vm_page_reservation * reservation,
+			TranslationMapPhysicalPageMapper * mapper,
+			int32& mapCount);
 };
 
 #endif /* SYSTEM_KERNEL_ARCH_AARCH64_AARCH64PAGINGMETHOD_H_ */

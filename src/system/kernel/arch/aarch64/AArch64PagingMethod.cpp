@@ -118,7 +118,38 @@ static void aarch64_promote_mapping(
 		base_entry += child_size;
 	}
 
+	__asm__ __volatile__("dsb ish");
+
 	table_entry[0] = phys | L1_TABLE;
+}
+
+static void aarch64_promote_mapping(
+		uint64 * table_entry,
+		vm_page_reservation * reservation,
+		size_t child_size,
+		uint8 descr_type,
+		TranslationMapPhysicalPageMapper * mapper)
+{
+	vm_page * page = vm_page_allocate_page(reservation,
+			PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
+
+	DEBUG_PAGE_ACCESS_END(page);
+
+	phys_addr_t physicalAddress = (phys_addr_t) page->physical_page_number
+			* B_PAGE_SIZE;
+
+	uint64 * virtual_block = (uint64 *)mapper->GetPageTableAt(physicalAddress);
+
+	uint64 base_entry = (AArch64PagingMethod::LoadTableEntry(&table_entry[0]) & ~uint64(ATTR_DESCR_MASK)) | descr_type;
+
+	for(uint32 i = 0 ; i < Ln_ENTRIES ; ++i) {
+		virtual_block[i] = base_entry;
+		base_entry += child_size;
+	}
+
+	__asm__ __volatile__("dsb ish");
+
+	AArch64PagingMethod::SetTableEntry(&table_entry[0], physicalAddress | L1_TABLE);
 }
 
 status_t AArch64PagingMethod::MapEarly(kernel_args* args, addr_t virtualAddress,
@@ -266,4 +297,131 @@ uint64 AArch64PagingMethod::AttributesForMemoryFlags(uint32 prot, uint32 memoryT
 	}
 
 	return result;
+}
+
+uint64 * AArch64PagingMethod::PageTableEntryForAddress(uint64 * pageDirectory,
+			addr_t virtualAddress,
+			bool isKernelMap,
+			bool allocateMemory,
+			vm_page_reservation * reservation,
+			TranslationMapPhysicalPageMapper * mapper,
+			int32& mapCount)
+{
+	int l0_index = pmap_l0_index(virtualAddress);
+	int l1_index = pmap_l1_index(virtualAddress);
+	int l2_index = pmap_l2_index(virtualAddress);
+	int l3_index = pmap_l3_index(virtualAddress);
+
+	uint64 * l0 = fKernelVirtualPgDir;
+	uint64 * l1;
+	uint64 * l2;
+	uint64 * l3;
+
+	uint64 entry = LoadTableEntry(&l0[l0_index]);
+
+	if((entry & ATTR_DESCR_MASK) != L0_TABLE) {
+		if(!allocateMemory) {
+			return nullptr;
+		}
+
+		vm_page * page = vm_page_allocate_page(reservation,
+				PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
+
+		DEBUG_PAGE_ACCESS_END(page);
+
+		phys_addr_t physicalAddress = (phys_addr_t) page->physical_page_number
+				* B_PAGE_SIZE;
+
+
+		SetTableEntry(&l0[l0_index], physicalAddress | L0_TABLE);
+
+		++mapCount;
+
+		l1 = (uint64 *)mapper->GetPageTableAt(physicalAddress);
+	} else {
+		l1 = (uint64 *)mapper->GetPageTableAt(entry & ~ATTR_MASK);
+	}
+
+	uint64 l1_entry = LoadTableEntry(&l1[l1_index]);
+
+	if((l1_entry & ATTR_DESCR_MASK) == L1_BLOCK) {
+		if(!allocateMemory) {
+			return nullptr;
+		}
+
+		aarch64_promote_mapping(l1 + l1_index,
+				reservation,
+				L2_SIZE,
+				L2_BLOCK,
+				mapper);
+
+		++mapCount;
+
+		l1_entry = LoadTableEntry(&l1[l1_index]);
+	}
+
+	if((l1_entry & ATTR_DESCR_MASK) != L1_TABLE) {
+		if(!allocateMemory) {
+			return nullptr;
+		}
+
+		vm_page * page = vm_page_allocate_page(reservation,
+				PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
+
+		DEBUG_PAGE_ACCESS_END(page);
+
+		phys_addr_t physicalAddress = (phys_addr_t) page->physical_page_number
+				* B_PAGE_SIZE;
+
+		SetTableEntry(&l1[l1_index], physicalAddress | L1_TABLE);
+
+		++mapCount;
+
+		l2 = (uint64 *)mapper->GetPageTableAt(physicalAddress);
+	} else {
+		l2 = (uint64 *)mapper->GetPageTableAt(l1_entry & ~ATTR_MASK);
+	}
+
+
+	uint64 l2_entry = LoadTableEntry(&l2[l2_index]);
+
+	if((l2_entry & ATTR_DESCR_MASK) == L2_BLOCK) {
+		if(!allocateMemory) {
+			return nullptr;
+		}
+
+		aarch64_promote_mapping(l2 + l2_index,
+				reservation,
+				L3_SIZE,
+				L3_PAGE,
+				mapper);
+
+		++mapCount;
+
+		l2_entry = LoadTableEntry(&l2[l2_index]);
+	}
+
+	if((l2_entry & ATTR_DESCR_MASK) != L2_TABLE) {
+		if(!allocateMemory) {
+			return nullptr;
+		}
+
+		vm_page * page = vm_page_allocate_page(reservation,
+				PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
+
+		DEBUG_PAGE_ACCESS_END(page);
+
+		phys_addr_t physicalAddress = (phys_addr_t) page->physical_page_number
+				* B_PAGE_SIZE;
+
+		SetTableEntry(&l2[l2_index], physicalAddress | L1_TABLE);
+
+		++mapCount;
+
+		l3 = (uint64 *)mapper->GetPageTableAt(physicalAddress);
+	} else {
+		l3 = (uint64 *)mapper->GetPageTableAt(l2_entry & ~ATTR_MASK);
+	}
+
+	return &l3[l3_index];
 }
