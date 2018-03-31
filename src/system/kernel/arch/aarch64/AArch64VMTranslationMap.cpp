@@ -179,7 +179,7 @@ status_t AArch64VMTranslationMap::Map(addr_t virtualAddress, phys_addr_t physica
 					virtualAddress, *entry);
 
 	AArch64PagingMethod::SetTableEntry(entry, physicalAddress | L3_PAGE |
-			(fIsKernelMap ? 0 : ATTR_nG) |
+			(fIsKernelMap ? ATTR_AF : ATTR_nG) |
 			AArch64PagingMethod::AttributesForMemoryFlags(attributes, memoryType));
 
 	__asm__ __volatile__(
@@ -659,21 +659,187 @@ status_t AArch64VMTranslationMap::QueryInterrupt(addr_t virtualAddress,
 	return Query(virtualAddress, _physicalAddress, _flags);
 }
 
-status_t AArch64VMTranslationMap::Protect(addr_t base, addr_t top, uint32 attributes,
+status_t AArch64VMTranslationMap::Protect(addr_t start, addr_t end, uint32 attributes,
 		uint32 memoryType)
 {
+	start = ROUNDDOWN(start, B_PAGE_SIZE);
+	if (start >= end)
+		return B_OK;
 
+	uint64 newProtectionFlags = L3_PAGE |
+			(fIsKernelMap ? ATTR_AF : ATTR_nG) |
+			AArch64PagingMethod::AttributesForMemoryFlags(attributes, memoryType);
+
+	ThreadCPUPinner pinner(thread_get_current_thread());
+
+	for(uint32 l0_index = pmap_l0_index(start) ; l0_index < L0_ENTRIES && start != 0 && start < end ; ++l0_index) {
+		uint64 l0_entry = AArch64PagingMethod::LoadTableEntry(&fPagingStructures->virtual_pgdir[l0_index]);
+
+		if((l0_entry & ATTR_DESCR_MASK) != L0_TABLE) {
+			start = ROUNDUP(start + 1, L0_SIZE);
+			continue;
+		}
+
+		uint64 * l1_table = (uint64 *)fPageMapper->GetPageTableAt(l0_entry & ~ATTR_MASK);
+
+		for(uint32 l1_index = pmap_l1_index(start) ; l1_index < Ln_ENTRIES && start != 0 && start < end ; ++l1_index) {
+			uint64 l1_entry = AArch64PagingMethod::LoadTableEntry(&l1_table[l1_index]);
+
+			if((l1_entry & ATTR_DESCR_MASK) == L1_BLOCK) {
+				return B_BAD_VALUE;
+			}
+
+			if((l1_entry & ATTR_DESCR_MASK) != L1_TABLE) {
+				start = ROUNDUP(start + 1, L1_SIZE);
+				continue;
+			}
+
+			uint64 * l2_table = (uint64 *)fPageMapper->GetPageTableAt(l1_entry & ~ATTR_MASK);
+
+			for(uint32 l2_index = pmap_l2_index(start) ; l2_index < Ln_ENTRIES && start != 0 && start < end ; ++l2_index) {
+				uint64 l2_entry = AArch64PagingMethod::LoadTableEntry(&l2_table[l2_index]);
+
+				if((l2_entry & ATTR_DESCR_MASK) == L2_BLOCK) {
+					return B_BAD_VALUE;
+				}
+
+				if((l2_entry & ATTR_DESCR_MASK) != L2_TABLE) {
+					start = ROUNDUP(start + 1, L2_SIZE);
+					continue;
+				}
+
+				uint64 * l3_table = (uint64 *)fPageMapper->GetPageTableAt(l2_entry & ~ATTR_MASK);
+
+				for(uint32 l3_index = pmap_l3_index(start) ; l3_index < Ln_ENTRIES && start != 0 && start < end ; ++l3_index) {
+					std::atomic<uint64> * pteEntry = reinterpret_cast<std::atomic<uint64> *>(&l3_table[l3_index]);
+					uint64 oldEntry = pteEntry->load(std::memory_order_relaxed);
+
+					if((oldEntry & ATTR_DESCR_MASK) == L3_PAGE) {
+						while(!pteEntry->compare_exchange_strong(oldEntry,
+								(oldEntry & ~ATTR_MASK) |
+								(oldEntry & (ATTR_AF | ATTR_SW_DIRTY)) |
+								newProtectionFlags,
+								std::memory_order_seq_cst));
+
+						__asm__ __volatile__(
+							"dsb ishst\n\t"
+							"tlbi vae1is, %0\n\t"
+							::"r"((start >> 12) | (uint64(fPagingStructures->asid) << 48)));
+
+					}
+
+					start += L3_SIZE;
+				}
+			}
+		}
+	}
+
+	__asm__ __volatile__("dsb ish\n\tisb");
+
+	return B_OK;
 }
 
 status_t AArch64VMTranslationMap::ClearFlags(addr_t virtualAddress, uint32 flags)
 {
+	ThreadCPUPinner pinner(thread_get_current_thread());
 
+	uint64 * entry = AArch64PagingMethod::PageTableEntryForAddress(fPagingStructures->virtual_pgdir,
+			virtualAddress,
+			fIsKernelMap,
+			false,
+			nullptr,
+			fPageMapper,
+			fMapCount);
+
+	if(!entry)
+		return B_OK;
+
+	uint64 clearFlags = ((flags & PAGE_MODIFIED) ? ATTR_SW_DIRTY : 0) |
+			((flags & PAGE_ACCESSED) ? ATTR_AF : 0);
+
+	AArch64PagingMethod::ClearTableEntryFlags(entry, clearFlags);
+
+	__asm__ __volatile__(
+		"dsb ishst\n\t"
+		"tlbi vae1is, %0\n\t"
+		"dsb ish\n\t"
+		"isb"
+		::"r"((virtualAddress >> 12) | (uint64(fPagingStructures->asid) << 48)));
+
+	return B_OK;
 }
 
 bool AArch64VMTranslationMap::ClearAccessedAndModified(VMArea* area, addr_t address,
 		bool unmapIfUnaccessed, bool& _modified)
 {
+	ASSERT(address % B_PAGE_SIZE == 0);
 
+	RecursiveLocker locker(fLock);
+	ThreadCPUPinner pinner(thread_get_current_thread());
+
+	uint64 * entry = AArch64PagingMethod::PageTableEntryForAddress(
+			fPagingStructures->virtual_pgdir, address, fIsKernelMap,
+			false, nullptr, fPageMapper, fMapCount);
+
+	if(!entry)
+		return false;
+
+	uint64 oldEntry;
+
+	if (unmapIfUnaccessed) {
+		oldEntry = AArch64PagingMethod::LoadTableEntry(entry);
+
+		while (true) {
+			if ((oldEntry & ATTR_DESCR_MASK) != L3_PAGE) {
+				// page mapping not valid
+				return false;
+			}
+
+			if (oldEntry & ATTR_AF) {
+				// page was accessed -- just clear the flags
+				oldEntry = AArch64PagingMethod::ClearTableEntryFlags(entry, ATTR_AF);
+				break;
+			}
+
+			// page hasn't been accessed -- unmap it
+			if (AArch64PagingMethod::TestAndSetTableEntry(entry, 0, oldEntry)) {
+				break;
+			}
+
+			// something changed -- check again
+		}
+	} else {
+		oldEntry = AArch64PagingMethod::ClearTableEntryFlags(entry, ATTR_AF | ATTR_SW_DIRTY);
+	}
+
+	__asm__ __volatile__(
+		"dsb ishst\n\t"
+		"tlbi vae1is, %0\n\t"
+		"dsb ish\n\t"
+		"isb"
+		::"r"((address >> 12) | (uint64(fPagingStructures->asid) << 48)));
+
+	pinner.Unlock();
+
+	_modified = (oldEntry & ATTR_SW_DIRTY) != 0;
+
+	if ((oldEntry & ATTR_AF) != 0) {
+		return true;
+	}
+
+	if (!unmapIfUnaccessed) {
+		return false;
+	}
+
+
+	fMapCount--;
+
+	locker.Detach();
+	// UnaccessedPageUnmapped() will unlock for us
+
+	UnaccessedPageUnmapped(area, (oldEntry & ~ATTR_MASK) / B_PAGE_SIZE);
+
+	return false;
 }
 
 void AArch64VMTranslationMap::Flush()

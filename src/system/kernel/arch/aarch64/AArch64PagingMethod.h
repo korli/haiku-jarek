@@ -27,23 +27,31 @@ struct AArch64PagingMethod {
 	static bool IsKernelPageAccessible(addr_t virtualAddress, uint32 protection);
 
 	static inline void SetTableEntry(uint64 * entry, uint64 value) {
-		reinterpret_cast<std::atomic<uint64> *>(entry)->store(value, std::memory_order_relaxed);
+		reinterpret_cast<std::atomic<uint64> *>(entry)->store(value, std::memory_order_release);
 	}
 
 	static inline uint64 ChangeTableEntry(uint64 * entry, uint64 value) {
-		return reinterpret_cast<std::atomic<uint64> *>(entry)->exchange(value, std::memory_order_relaxed);
+		return reinterpret_cast<std::atomic<uint64> *>(entry)->exchange(value, std::memory_order_acq_rel);
 	}
 
 	static inline uint64 SetTableEntryFlags(uint64 * entry, uint64 value) {
-		return reinterpret_cast<std::atomic<uint64> *>(entry)->fetch_or(value, std::memory_order_relaxed);
+		return reinterpret_cast<std::atomic<uint64> *>(entry)->fetch_or(value, std::memory_order_release);
+	}
+
+	static inline uint64 ClearTableEntryFlags(uint64 * entry, uint64 value) {
+		return reinterpret_cast<std::atomic<uint64> *>(entry)->fetch_and(~value, std::memory_order_release);
 	}
 
 	static inline uint64 ClearTableEntry(uint64 * entry) {
-		return reinterpret_cast<std::atomic<uint64> *>(entry)->exchange(0, std::memory_order_relaxed);
+		return reinterpret_cast<std::atomic<uint64> *>(entry)->exchange(0, std::memory_order_release);
 	}
 
 	static inline uint64 LoadTableEntry(uint64 * entry) {
-		return reinterpret_cast<std::atomic<uint64> *>(entry)->load(std::memory_order_relaxed);
+		return reinterpret_cast<std::atomic<uint64> *>(entry)->load(std::memory_order_acquire);
+	}
+
+	static inline bool TestAndSetTableEntry(uint64 * entry, uint64 newValue, uint64& expectedValue) {
+		return reinterpret_cast<std::atomic<uint64> *>(entry)->compare_exchange_strong(expectedValue, newValue, std::memory_order_seq_cst);
 	}
 
 	static uint64 AttributesForMemoryFlags(uint32 protection, uint32 memoryType);

@@ -226,7 +226,7 @@ status_t AArch64PagingMethod::MapEarly(kernel_args* args, addr_t virtualAddress,
 		l3 = (uint64 *)((l2[l2_index] & ~ATTR_MASK) + DMAP_BASE);
 	}
 
-	l3[l3_index] = physicalAddress | L3_PAGE | AttributesForMemoryFlags(attributes, 0);
+	l3[l3_index] = physicalAddress | L3_PAGE | AttributesForMemoryFlags(attributes, 0) | ATTR_AF;
 
 	__asm__ __volatile__(
 		"dsb ishst\n\t"
@@ -258,7 +258,7 @@ bool AArch64PagingMethod::IsKernelPageAccessible(addr_t virtualAddress, uint32 p
 
 uint64 AArch64PagingMethod::AttributesForMemoryFlags(uint32 prot, uint32 memoryType)
 {
-	uint64 result = ATTR_AF | ATTR_SH(ATTR_SH_IS);
+	uint64 result = ATTR_SH(ATTR_SH_IS);
 
 	switch(memoryType)
 	{
