@@ -120,6 +120,7 @@ ADDRESS_TRANSLATE_FUNC(s1e0w)
 ADDRESS_TRANSLATE_FUNC(s1e1r)
 ADDRESS_TRANSLATE_FUNC(s1e1w)
 
+struct AArch64PagingStructures;
 
 #ifdef __cplusplus
 namespace BKernel {
@@ -134,6 +135,7 @@ typedef struct arch_cpu_info {
 #else
 	void *						last_vfp_user;
 #endif
+	struct AArch64PagingStructures * active_paging_structures;
 } arch_cpu_info;
 
 #ifdef __cplusplus

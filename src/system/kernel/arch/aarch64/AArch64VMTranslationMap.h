@@ -55,6 +55,9 @@ public:
 
 	virtual void Flush() override;
 
+	inline AArch64PagingStructures * PagingStructures() const {
+		return fPagingStructures;
+	}
 
 private:
 	bool fIsKernelMap = false;
