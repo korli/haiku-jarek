@@ -216,3 +216,42 @@ ENTRY(arch_cpu_sync_icache)
 	dsb	ish
 	ret
 END(arch_cpu_sync_icache)
+
+ENTRY(aarch64_context_swap)
+	mov		x6, sp
+	adr		x7, 1f
+
+	stp		x8,  x9, [x0, #(ARCH_THREAD_x + 8 * 8)]
+	stp	   x10, x11, [x0, #(ARCH_THREAD_x + 10 * 8)]
+	stp	   x12, x13, [x0, #(ARCH_THREAD_x + 12 * 8)]
+	stp	   x14, x15, [x0, #(ARCH_THREAD_x + 14 * 8)]
+	stp	   x16, x17, [x0, #(ARCH_THREAD_x + 16 * 8)]
+	stp	   x18, x19, [x0, #(ARCH_THREAD_x + 18 * 8)]
+	stp	   x20, x21, [x0, #(ARCH_THREAD_x + 20 * 8)]
+	stp	   x22, x23, [x0, #(ARCH_THREAD_x + 22 * 8)]
+	stp	   x24, x25, [x0, #(ARCH_THREAD_x + 24 * 8)]
+	stp	   x26, x27, [x0, #(ARCH_THREAD_x + 26 * 8)]
+	stp	   x28, x29, [x0, #(ARCH_THREAD_x + 28 * 8)]
+	str	   x30, [x0, #(ARCH_THREAD_x + 30 * 8)]
+	str	   x6, [x0, #(ARCH_THREAD_sp)]
+	str	   x7, [x0, #(ARCH_THREAD_pc)]
+
+1:
+
+	ldp		x8,  x9, [x1, #(ARCH_THREAD_x + 8 * 8)]
+	ldp	   x10, x11, [x1, #(ARCH_THREAD_x + 10 * 8)]
+	ldp	   x12, x13, [x1, #(ARCH_THREAD_x + 12 * 8)]
+	ldp	   x14, x15, [x1, #(ARCH_THREAD_x + 14 * 8)]
+	ldp	   x16, x17, [x1, #(ARCH_THREAD_x + 16 * 8)]
+	ldp	   x18, x19, [x1, #(ARCH_THREAD_x + 18 * 8)]
+	ldp	   x20, x21, [x1, #(ARCH_THREAD_x + 20 * 8)]
+	ldp	   x22, x23, [x1, #(ARCH_THREAD_x + 22 * 8)]
+	ldp	   x24, x25, [x1, #(ARCH_THREAD_x + 24 * 8)]
+	ldp	   x26, x27, [x1, #(ARCH_THREAD_x + 26 * 8)]
+	ldp	   x28, x29, [x1, #(ARCH_THREAD_x + 28 * 8)]
+	ldr	   x30, [x1, #(ARCH_THREAD_x + 30 * 8)]
+	ldr	   x6, [x1, #(ARCH_THREAD_sp)]
+
+	mov	   sp, x6
+	ret
+END(aarch64_context_swap)

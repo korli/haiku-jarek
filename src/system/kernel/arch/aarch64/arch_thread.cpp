@@ -22,6 +22,8 @@
 #include "AArch64VMTranslationMap.h"
 
 #include <kernel/arch/aarch64/armreg.h>
+
+extern "C" void aarch64_context_swap(arch_thread * from, arch_thread * to);
 status_t
 arch_team_init_team_struct(Team* p, bool kernel)
 {
@@ -97,6 +99,8 @@ arch_thread_context_switch(Thread* from, Thread* to)
 
 	WRITE_SPECIALREG(tpidr_el0, to->arch_info.tpidr_el0);
 	WRITE_SPECIALREG(tpidrro_el0, to->arch_info.tpidrro_el0);
+
+	aarch64_context_swap(&from->arch_info, &to->arch_info);
 }
 
 
