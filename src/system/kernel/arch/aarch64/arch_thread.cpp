@@ -55,6 +55,48 @@ arch_thread_init_tls(Thread* thread)
 void
 arch_thread_context_switch(Thread* from, Thread* to)
 {
+	cpu_ent* cpuData = to->cpu;
+	from->arch_info.tpidr_el0 = READ_SPECIALREG(tpidr_el0);
+
+	AArch64PagingStructures* activePagingStructures = cpuData->arch.active_paging_structures;
+	VMAddressSpace* toAddressSpace = to->team->address_space;
+
+	AArch64PagingStructures* toPagingStructures;
+	if (toAddressSpace != NULL
+		&& (toPagingStructures = static_cast<AArch64VMTranslationMap *>(
+				toAddressSpace->TranslationMap())->PagingStructures())
+					!= activePagingStructures)
+	{
+		toPagingStructures->AddReference();
+		cpuData->arch.active_paging_structures = toPagingStructures;
+
+		// set the page directory, if it changes
+		phys_addr_t newPageDirectory = toPagingStructures->pgdir_phys;
+		uint64 newASID = toPagingStructures->asid;
+
+		if (newPageDirectory != activePagingStructures->pgdir_phys) {
+			__asm__ __volatile__(
+				"dsb ish\n\t"
+				"msr ttbr0_el1, %0\n\t"
+				"dsb ish\n\t"
+				"isb"
+				:: "r"(newPageDirectory | (newASID << 48)));
+		}
+
+		// This CPU no longer uses the previous paging structures.
+		activePagingStructures->RemoveReference();
+	}
+
+	if(from->flags & THREAD_FLAGS_SINGLE_STEP) {
+		WRITE_SPECIALREG(mdscr_el1, READ_SPECIALREG(mdscr_el1) & ~DBG_MDSCR_SS);
+		aarch64_isb();
+	} else if(to->flags & THREAD_FLAGS_SINGLE_STEP) {
+		WRITE_SPECIALREG(mdscr_el1, READ_SPECIALREG(mdscr_el1) | DBG_MDSCR_SS);
+		aarch64_isb();
+	}
+
+	WRITE_SPECIALREG(tpidr_el0, to->arch_info.tpidr_el0);
+	WRITE_SPECIALREG(tpidrro_el0, to->arch_info.tpidrro_el0);
 }
 
 
