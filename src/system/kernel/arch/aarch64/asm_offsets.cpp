@@ -79,4 +79,11 @@ dummy()
 
 	// struct siginfo_t
 	DEFINE_OFFSET_MACRO(SIGINFO_T, __siginfo_t, si_signo);
+
+	DEFINE_MACRO(PAGE_SIZEOF, B_PAGE_SIZE);
+
+	// struct iframe
+	DEFINE_OFFSET_MACRO(ARCH_THREAD, arch_thread, x);
+	DEFINE_OFFSET_MACRO(ARCH_THREAD, arch_thread, pc);
+	DEFINE_OFFSET_MACRO(ARCH_THREAD, arch_thread, sp);
 }
