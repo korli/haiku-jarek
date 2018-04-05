@@ -147,21 +147,25 @@ arch_cpu_init_post_modules(kernel_args* args)
 void
 arch_cpu_user_TLB_invalidate(void)
 {
+	// No need
 }
 
 void
 arch_cpu_global_TLB_invalidate(void)
 {
+	// No need
 }
 
 void
 arch_cpu_invalidate_TLB_range(addr_t start, addr_t end)
 {
+	// No need
 }
 
 void
 arch_cpu_invalidate_TLB_list(addr_t pages[], int num_pages)
 {
+	// No need
 }
 
 status_t
