@@ -169,8 +169,3 @@ arch_cpu_shutdown(bool rebootSystem)
 {
 	return B_OK;
 }
-
-void
-arch_cpu_sync_icache(void* address, size_t length)
-{
-}

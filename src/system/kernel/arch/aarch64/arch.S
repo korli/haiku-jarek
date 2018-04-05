@@ -175,3 +175,44 @@ ENTRY(handle_el0_error)
 	RESTORE_REGISTERS 0
 	eret
 END(handle_el0_error)
+
+.Lpage_mask:
+	.word	PAGE_SIZEOF - 1
+
+/*
+ * Macro to handle the cache. This takes the start address in x0, length
+ * in x1. It will corrupt x0, x1, x2, and x3.
+ */
+.macro cache_handle_range dcop = 0, ic = 0, icop = 0
+.if \ic == 0
+	ldr	x3, =dcache_line_size	/* Load the D cache line size */
+.else
+	ldr	x3, =idcache_line_size	/* Load the I & D cache line size */
+.endif
+	ldr	x3, [x3]
+	sub	x4, x3, #1		/* Get the address mask */
+	and	x2, x0, x4		/* Get the low bits of the address */
+	add	x1, x1, x2		/* Add these to the size */
+	bic	x0, x0, x4		/* Clear the low bit of the address */
+1:
+	dc	\dcop, x0
+	dsb	ish
+.if \ic != 0
+	ic	\icop, x0
+	dsb	ish
+.endif
+	add	x0, x0, x3		/* Move to the next line */
+	subs	x1, x1, x3		/* Reduce the size */
+	b.hi	1b			/* Check if we are done */
+.if \ic != 0
+	isb
+.endif
+	ret
+.endm
+
+ENTRY(arch_cpu_sync_icache)
+	cache_handle_range	dcop = cvau
+	ic	ialluis
+	dsb	ish
+	ret
+END(arch_cpu_sync_icache)
