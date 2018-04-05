@@ -7,6 +7,8 @@
 #define _KERNEL_ARCH_AARCH64_ARCH_THREAD_TYPES_H_
 
 #include <kernel.h>
+#include <kernel/arch/aarch64/iframe.h>
+
 
 struct arch_thread {
 	uint64			x[31];

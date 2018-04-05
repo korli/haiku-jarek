@@ -20,7 +20,8 @@
 
 #ifndef _ASSEMBLER
 
-#include <arch/aarch64/arch_thread_types.h>
+#include <kernel/arch/aarch64/arch_thread_types.h>
+#include <kernel/arch/aarch64/iframe.h>
 #include <kernel.h>
 
 #define aarch64_sev()  		__asm__ __volatile__("sev" : : : "memory")
@@ -119,15 +120,6 @@ ADDRESS_TRANSLATE_FUNC(s1e0w)
 ADDRESS_TRANSLATE_FUNC(s1e1r)
 ADDRESS_TRANSLATE_FUNC(s1e1w)
 
-/* raw exception frames */
-struct iframe {
-	uint64			sp;
-	uint64			lr;
-	uint64			elr;
-	uint32			spsr;
-	uint32			esr;
-	uint64			x[30];
-};
 
 #ifdef __cplusplus
 namespace BKernel {
