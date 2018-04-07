@@ -73,6 +73,20 @@ arch_vm_aspace_swap(struct VMAddressSpace *from, struct VMAddressSpace *to)
 bool
 arch_vm_supports_protection(uint32 protection)
 {
+	if((protection & (B_EXECUTE_AREA | B_KERNEL_EXECUTE_AREA)) &&
+	   (protection & (B_WRITE_AREA | B_KERNEL_WRITE_AREA)))
+	{
+		// Enforce Write-no-Execute policy
+		return false;
+	}
+
+	if(protection & B_MTR_MASK) {
+		// We don't allow execution on non-RAM areas
+		if(protection & (B_EXECUTE_AREA | B_KERNEL_EXECUTE_AREA)) {
+			return false;
+		}
+	}
+
 	return true;
 }
 
