@@ -85,9 +85,15 @@ extern "C" void do_el1h_sync(iframe * frame)
 	for(;;);
 }
 
-extern "C" void intr_irq_handler(iframe * frame)
+extern "C" void intr_irq_handler_el0(iframe * frame)
 {
+	panic("IRQs not implemented yet");
 	for(;;);
+}
+
+extern "C" void intr_irq_handler_el1(iframe * frame)
+{
+	panic("IRQs not implemented yet");
 }
 
 extern "C" void do_el1h_error(iframe * frame)

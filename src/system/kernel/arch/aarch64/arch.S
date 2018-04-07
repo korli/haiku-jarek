@@ -125,7 +125,6 @@ exception_vectors:
 	vempty			/* FIQ 32-bit EL0 */
 	vector el0_error	/* Error 32-bit EL0 */
 
-
 	.text
 
 ENTRY(handle_el1h_sync)
@@ -139,7 +138,7 @@ END(handle_el1h_sync)
 ENTRY(handle_el1h_irq)
 	SAVE_REGISTERS 1
 	mov	x0, sp
-	bl	intr_irq_handler
+	bl	intr_irq_handler_el1
 	RESTORE_REGISTERS 1
 	eret
 END(handle_el1h_irq)
@@ -163,7 +162,7 @@ END(handle_el0_sync)
 ENTRY(handle_el0_irq)
 	SAVE_REGISTERS 0
 	mov	x0, sp
-	bl	intr_irq_handler
+	bl	intr_irq_handler_el0
 	RESTORE_REGISTERS 0
 	eret
 END(handle_el0_irq)
