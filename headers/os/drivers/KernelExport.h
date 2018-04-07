@@ -122,7 +122,8 @@ typedef struct {
 #define	B_MTR_WT	0x30000000
 #define	B_MTR_WP	0x40000000
 #define	B_MTR_WB	0x50000000
-#define B_MTR_DEV	0x60000000
+#define B_MTR_DEV	0x60000000 /* Device Memory */
+#define B_MTR_NS	0x70000000 /* Non-Secure memory - TrustZone based CPUs */
 #define	B_MTR_MASK	0xf0000000
 
 
